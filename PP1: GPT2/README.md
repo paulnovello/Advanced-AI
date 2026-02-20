@@ -1,6 +1,10 @@
 
 # Progamming Practical 1: Sampling from GPT2
 
+This Programming Practical focuses on sampling from a trained GPT-2 model. After completing the missing part of `model.py`, we will use the `sample.py` script to generate text samples based on a given prompt. 
+
+This code is a skinny version of Karpathy's [nanoGPT](https://github.com/karpathy/nanoGPT/tree/master?tab=readme-ov-files), focused on sampling and GPT2 only. Check out the full repo for more features and training code.
+
 
 ## Sampling from a Trained Model
 
