@@ -16,7 +16,7 @@ A vanilla ViT can only classify images into a fixed set of categories. **CLIP** 
 
 Notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/paulnovello/Advanced-AI/blob/main/PP2%3A%20Vision/CLIP.ipynb)
 
-Solution: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/paulnovello/Advanced-AI/blob/main/PP2%3A%20Vision/CLIP_solution.ipynb)
+Solution: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/paulnovello/Advanced-AI/blob/main/PP2%3A%20Vision/clip_solution.ipynb)
 
 ## 3. Vision-Language Model (VLM)
 
