@@ -147,9 +147,9 @@ def forward(self, x: torch.Tensor):
     x = # TODO: add self.positional_embedding to x (cast positional_embedding to x.dtype)
     x = self.ln_pre(x)
 
-    x = x.permute(1, 0, 2)  # [batch_size, grid ** 2, width] -> [grid ** 2, batch_size, width] (required by nn.MultiheadAttention)
+    x = x.permute(1, 0, 2)  # [batch_size, grid ** 2 + 1, width] -> [grid ** 2 + 1, batch_size, width] (required by nn.MultiheadAttention)
     x = self.transformer(x)
-    x = x.permute(1, 0, 2)  # [grid ** 2, batch_size, width] -> [batch_size, grid ** 2, width]
+    x = x.permute(1, 0, 2)  # [grid ** 2 + 1, batch_size, width] -> [batch_size, grid ** 2 + 1, width]
 
     x = # TODO: apply self.ln_post to the class token only (position 0: x[:, 0, :])
     if self.proj is not None:
