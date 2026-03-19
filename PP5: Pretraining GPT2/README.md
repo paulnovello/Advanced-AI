@@ -3,6 +3,12 @@
 
 ![nanoGPT](assets/nanogpt.jpg)
 
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+
+srun -p shared -n1 --gres=gpu:1 --pty apptainer shell --env PATH=$HOME/.local/bin:$PATH  --bind /tmpdir,/work --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif
+
+
 
 ---
 
