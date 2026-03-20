@@ -125,6 +125,7 @@ apptainer shell --env PATH=$HOME/.local/bin:$PATH --env UV_PROJECT_ENVIRONMENT=/
 You are now in the `apptainer` image! Install the env using:
 
 ```bash
+uv venv --system-site-packages /tmpdir/YOUR_USERNAME/envs/aai
 uv sync --only-group turpan
 ``` 
 
