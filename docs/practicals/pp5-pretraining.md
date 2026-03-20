@@ -1,3 +1,9 @@
+# Programming Practical 5 - Pretraining GPT2 on a cluster
+
+TODO complete with an introduction outlining the programming practical and the learning outcomes. Emphasize that SLURM is ubiquitous in the AI industry to run code on clusters and that learning how to use it is a crucial skill for any AI practitioner. 
+
+
+s
 ## 1. Logging in the cluster
 
 For convenience, create a config file in `~/.ssh/config` with the following content:
@@ -101,6 +107,15 @@ Then, go to your project directory with `cd` and launch the apptainer image on t
 apptainer shell --env PATH=$HOME/.local/bin:$PATH --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai --bind /tmpdir,/work --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif
 ```
 
+!!! Hint
+    Once you have completed this command with YOUR_USERNAME, save it as an alias in your `~/.bashrc` to avoid having to write it every time. Add these lines:
+
+    ```bash
+    alias run_apptainer_gpu="apptainer shell --env PATH=$HOME/.local/bin:$PATH --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai --bind /tmpdir,/work --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif"
+    ```
+    and then refresh the `~/.bashrc` with `source ~/.bashrc`. Then you can simply run `run_apptainer_gpu` to launch the apptainer image on a compute node.
+
+
 You are now in the `apptainer` image! Install the env using:
 
 ```bash
@@ -120,6 +135,14 @@ Launch an interactive session on a compute node with (do not forget to replace Y
 ```bash
 srun -p shared -n1 --gres=gpu:1 --pty apptainer shell --env PATH=$HOME/.local/bin:$PATH  --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai --bind /tmpdir,/work --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif
 ```
+
+!!! Hint
+    Once you have completed this command with YOUR_USERNAME, save it as an alias in your `~/.bashrc` to avoid having to write it every time. Add these lines:
+
+    ```bash
+    alias run_apptainer_gpu="srun -p shared -n1 --gres=gpu:1 --pty apptainer shell --env PATH=$HOME/.local/bin:$PATH  --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai --bind /tmpdir,/work --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif"
+    ```
+    and then refresh the `~/.bashrc` with `source ~/.bashrc`. Then you can simply run `run_apptainer_gpu` to launch the apptainer image on a compute node.
 
 You can check that you are on a compute node by using `nvidia-smi`. Then you can run your scripts as you would do in a local machine.
 
@@ -222,4 +245,46 @@ cat ~/job_results/out/job_job_id.out
 cat ~/job_results/err/job_job_id.err
 ```
 
-Or open it in vscode and refresh it when you want to check the output / error.
+Or open it in vscode and refresh it when you want to check the output / error. One super convenient way to check the output on vscode is to click File > Add folder to workspace, then add the `job_results` folder. Then you can open the `out` and `err` folders in the vscode explorer alongside your code and open the output and error files of your job.
+
+
+**Exercice** Try to create a script `test_script.py` that prints "Hello world!" and submit it to the cluster with the `.sbatch` script template. Check the output and error files to see if it worked. 
+
+## 5. Pretraining GPT2
+
+The code you will use is taken from Karpathy's [nanoGPT](https://github.com/karpathy/nanoGPT/tree/master?tab=readme-ov-files), which is a minimalist implementation of GPT-2. You will find the code in `PP5: Pretraining GPT2` folder.
+
+### Complete the missing parts
+
+Before launching your first training on the cluster, you will have to complete the missing parts in the code involved in training and generation, as in previous PPs.
+
+TODO fill this section - see instructions.
+
+
+### Pretraining on French Philosophy
+
+The dataset you will use is a collection of French Philosophy books from the [Gutenberg project](https://www.gutenberg.org/). You can find the dataset in `data/philosophy`. It is already split in a training and a validation set.
+
+
+TODO Complete here with instructions to run the training. The training will be launched with an sbatch file and students should complete it themselve as an exercice (prepend **Exercice**)
+
+
+At the end of the training, you can sample from the model using:
+
+```bash
+uv run python sample.py --out_dir out-french-philosophy --start "Your prompt here"
+```
+**Exercice** Try to run it on a compute node in interactive mode to see how using GPUs accelerate the sampling.
+
+### Finetuning on French Philosophy
+
+
+TODO Complete here with instructions to run the training. The training will be launched with an sbatch file and students should complete it themselve as an exercice (prepend **Exercice**)
+
+At the end of the training, you can sample from the model using:
+
+```bash
+uv run python sample.py --out_dir out-french-philosophy --start "Your prompt here"
+```
+
+**Exercice** Try to run it on a compute node in interactive mode to see how using GPUs accelerate the sampling.

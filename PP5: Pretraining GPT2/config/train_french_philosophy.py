@@ -33,6 +33,5 @@ beta2 = 0.99
 warmup_iters = 100
 
 # CPU settings
-device = "cpu"
 compile = False
 dtype = "float32"

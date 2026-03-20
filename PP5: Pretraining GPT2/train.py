@@ -15,6 +15,7 @@ from contextlib import nullcontext
 import numpy as np
 import torch
 from torch.nn import functional as F
+from tqdm import tqdm
 
 from model import GPTConfig, GPT
 
@@ -53,7 +54,7 @@ lr_decay_iters = 600000  # should be ~= max_iters per Chinchilla
 min_lr = 6e-5  # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # system
 device = (
-    "cuda"  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+    "cuda" if torch.cuda.is_available() else "cpu"  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 )
 dtype = (
     "bfloat16"
@@ -71,7 +72,7 @@ exec(open("configurator.py").read())  # overrides from command line or config fi
 config = {k: globals()[k] for k in config_keys}  # will be useful for logging
 # -----------------------------------------------------------------------------
 
-tokens_per_iter = gradient_accumulation_steps * batch_size * block_size
+tokens_per_iter = gradient_accumulation_steps * batch_size * block_size 
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 os.makedirs(out_dir, exist_ok=True)
@@ -102,16 +103,9 @@ def get_batch(split):
         data = np.memmap(os.path.join(data_dir, "train.bin"), dtype=np.uint16, mode="r")
     else:
         data = np.memmap(os.path.join(data_dir, "val.bin"), dtype=np.uint16, mode="r")
-    ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack(
-        [torch.from_numpy((data[i : i + block_size]).astype(np.int64)) for i in ix]
-    )
-    y = torch.stack(
-        [
-            torch.from_numpy((data[i + 1 : i + 1 + block_size]).astype(np.int64))
-            for i in ix
-        ]
-    )
+    ix = #TODO mention that block_size is context length
+    x = #TODO
+    y = #TODO
     if device_type == "cuda":
         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(
@@ -140,7 +134,7 @@ model_args = dict(
     n_layer=n_layer,
     n_head=n_head,
     n_embd=n_embd,
-    block_size=block_size,
+    block_size =block_size ,
     bias=bias,
     vocab_size=None,
     dropout=dropout,
@@ -164,7 +158,7 @@ elif init_from == "resume":
     checkpoint_model_args = checkpoint["model_args"]
     # force these config attributes to be equal otherwise we can't even resume training
     # the rest of the attributes (e.g. dropout) can stay as desired from command line
-    for k in ["n_layer", "n_head", "n_embd", "block_size", "bias", "vocab_size"]:
+    for k in ["n_layer", "n_head", "n_embd", "block_size ", "bias", "vocab_size"]:
         model_args[k] = checkpoint_model_args[k]
     # create the model
     gptconf = GPTConfig(**model_args)
@@ -185,13 +179,13 @@ elif init_from.startswith("gpt2"):
     override_args = dict(dropout=dropout)
     model = GPT.from_pretrained(init_from, override_args)
     # read off the created config params, so we can store them into checkpoint correctly
-    for k in ["n_layer", "n_head", "n_embd", "block_size", "bias", "vocab_size"]:
+    for k in ["n_layer", "n_head", "n_embd", "block_size ", "bias", "vocab_size"]:
         model_args[k] = getattr(model.config, k)
 # crop down the model block size if desired, using model surgery
-if block_size < model.config.block_size:
-    model.crop_block_size(block_size)
-    model_args["block_size"] = (
-        block_size  # so that the checkpoint will have the right value
+if block_size  < model.config.block_size :
+    model.crop_block_size (block_size )
+    model_args["block_size "] = (
+        block_size   # so that the checkpoint will have the right value
     )
 model.to(device)
 
@@ -247,10 +241,16 @@ def get_lr(it):
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))  # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
 
+if device == "cpu":
+    print(
+        "WARNING: No GPU detected, aborting training."
+    )
+    exit(1)
 
 # training loop
 X, Y = get_batch("train")  # fetch the very first batch
 t0 = time.time()
+pbar = tqdm(total=max_iters, initial=iter_num, desc="Training", ncols=100)
 while True:
 
     # determine and set the learning rate for this iteration
@@ -284,10 +284,8 @@ while True:
     # and using the GradScaler if data type is float16
     for micro_step in range(gradient_accumulation_steps):
         with ctx:
-            logits = model(X)
-            loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)), Y.view(-1), ignore_index=-1
-            )
+            logits = #TODO
+            loss = #TODO
             loss = (
                 loss / gradient_accumulation_steps
             )  # scale the loss to account for gradient accumulation
@@ -313,9 +311,12 @@ while True:
         # get loss as float. note: this is a CPU-GPU sync point
         # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
         lossf = loss.item() * gradient_accumulation_steps
-        print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms")
+        pbar.set_postfix({'loss': f'{lossf:.4f}', 'time': f'{dt*1000:.2f}ms'})
+    
+    pbar.update(1)
     iter_num += 1
 
     # termination conditions
     if iter_num > max_iters:
+        pbar.close()
         break

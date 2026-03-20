@@ -32,6 +32,5 @@ decay_lr = False
 warmup_iters = 20
 
 # CPU settings (change to 'cuda' or 'mps' if available)
-device = "cpu"
 compile = False
 dtype = "float32"
