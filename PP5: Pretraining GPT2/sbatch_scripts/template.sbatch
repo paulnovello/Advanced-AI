@@ -15,4 +15,4 @@ apptainer exec \
 --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai \
 --bind /tmpdir,/work \
 --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif \
-uv run python mon_script.py
+uv run --no-sync python mon_script.py

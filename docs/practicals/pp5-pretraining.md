@@ -178,7 +178,7 @@ apptainer exec \
 --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai \
 --bind /tmpdir,/work \
 --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif \
-uv run python mon_script.py
+uv run --no-sync python mon_script.py
 ```
 
 You can find this tamplate on `sbatch_scripts/template.sbatch` in the project. Take the time to understand each `#SBATCH` line of the script:
@@ -352,7 +352,7 @@ The training configuration is in `config/train_french_philosophy.py`. It defines
 **Exercice** Create an `.sbatch` script (based on `sbatch_scripts/template.sbatch`) that launches the pretraining. You will need to:
 
 1. Copy the template and adapt `YOUR_USERNAME` and the script path.
-2. Set the command to `uv run python train.py config/train_french_philosophy.py`.
+2. Set the command to `uv run --no-sync python train.py config/train_french_philosophy.py`.
 3. Set an appropriate time limit (30 minutes should be sufficient).
 4. Submit your job with `sbatch --reservation=tpirt4 your_script.sbatch`.
 5. Monitor progress with `squeue -u $USER -l` and check the output/error files in `~/job_results/`.
@@ -361,7 +361,7 @@ The training configuration is in `config/train_french_philosophy.py`. It defines
 At the end of the training, you can sample from the model (from the apptainer) using:
 
 ```bash
-uv run python sample.py --out_dir=out-french-philosophy --start="Your prompt here"
+uv run --no-sync python sample.py --out_dir=out-french-philosophy --start="Your prompt here"
 ```
 **Exercice** Try to run it on a compute node in interactive mode to see how using GPUs accelerate the sampling.
 
@@ -370,12 +370,12 @@ uv run python sample.py --out_dir=out-french-philosophy --start="Your prompt her
 Instead of training from scratch, you can start from the pretrained GPT-2 (124M parameters) weights and finetune on the French Philosophy corpus. The configuration is in `config/finetune_french_philosophy.py`. Notice the key differences with pretraining from scratch: lower learning rate, no learning rate decay, dropout enabled, and the model is initialized from `gpt2` weights.
 
 !!! Note
-    The finetuning config uses `init_from = "gpt2"`, which downloads the pretrained weights from HuggingFace. Since compute nodes have no internet access, you must first run the script once on the **login node** so that the weights are cached. Run: `uv run python train.py config/finetune_french_philosophy.py` on the login node before submitting the job. This should detect that you are not in a compute node and stop before training.
+    The finetuning config uses `init_from = "gpt2"`, which downloads the pretrained weights from HuggingFace. Since compute nodes have no internet access, you must first run the script once on the **login node** so that the weights are cached. Run: `uv run --no-sync python train.py config/finetune_french_philosophy.py` on the login node before submitting the job. This should detect that you are not in a compute node and stop before training.
 
 **Exercice** Create an `.sbatch` script that launches the finetuning. You will need to:
 
 1. Copy the template and adapt `YOUR_USERNAME` and the script path.
-2. Set the command to `uv run python train.py config/finetune_french_philosophy.py`.
+2. Set the command to `uv run --no-sync python train.py config/finetune_french_philosophy.py`.
 3. Set an appropriate time limit (30 minutes should be sufficient).
 4. Submit your job and monitor its progress as before.
 5. Compare the final validation loss with the pretrained-from-scratch model. Which one is better?
@@ -397,7 +397,7 @@ At the end of the training, you can sample from the finetuned model (from the ap
 
 
 ```bash
-uv run python sample.py --out_dir=out-french-philosophy-ft --start="Your prompt here"
+uv run --no-sync python sample.py --out_dir=out-french-philosophy-ft --start="Your prompt here"
 ```
 
 **Exercice** Try to run it on a compute node in interactive mode to see how using GPUs accelerate the sampling.
