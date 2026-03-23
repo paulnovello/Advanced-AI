@@ -25,6 +25,8 @@ Each task is evaluated via **linear probing** and **t-SNE** on CIFAR-10 classes 
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/paulnovello/Advanced-AI/blob/main/PP6%3ASSL/ssl_part2_simclr.ipynb)
 
+Solution: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/paulnovello/Advanced-AI/blob/main/PP6%3A%SSL/ssl_part2_simclr_solution.ipynb)
+
 SimCLR (Chen et al., 2020) takes one image, creates **two augmented views**, and trains the network to pull them together while pushing apart views from different images.
 
 You will implement:
