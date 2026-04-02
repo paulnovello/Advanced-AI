@@ -1,12 +1,38 @@
+"""Batch collation utilities for PP7 VQA-style training."""
+
 import torch
 
 
 class VQACollator:
+    """Pad variable-length multimodal samples into a dense training batch.
+
+    The collator filters invalid samples, removes examples that exceed the
+    configured sequence length, and pads the remaining tensors to the maximum
+    length within the batch.
+    """
+
     def __init__(self, tokenizer, max_length):
+        """Initialize the collator.
+
+        Args:
+            tokenizer: Tokenizer used to obtain the padding token id.
+            max_length: Maximum accepted sequence length before a sample is
+                dropped from the batch.
+        """
         self.tokenizer = tokenizer
         self.max_length = max_length
 
     def __call__(self, batch):
+        """Filter invalid samples, pad the rest, and stack them into tensors.
+
+        Args:
+            batch: Sequence of dataset samples, some of which may be `None`.
+
+        Returns:
+            A dictionary containing padded `input_ids`, `attention_mask`,
+            `labels`, and stacked `pixel_values`. Empty tensors are returned if
+            no valid sample survives filtering.
+        """
         batch = [sample for sample in batch if sample is not None]
         if not batch:
             return {

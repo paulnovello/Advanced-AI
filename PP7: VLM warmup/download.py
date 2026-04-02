@@ -1,3 +1,5 @@
+"""Pre-download Hugging Face assets needed by the PP7 warmup."""
+
 import argparse
 
 from datasets import load_dataset
@@ -8,6 +10,11 @@ from models.config import VLMConfig
 
 
 def parse_args():
+    """Parse command-line arguments for cache warmup.
+
+    Returns:
+        An `argparse.Namespace` describing which models and datasets to cache.
+    """
     parser = argparse.ArgumentParser(description="Warm up PP7 caches for offline execution")
     parser.add_argument("--dataset-path", type=str, default="AnyModal/flickr30k")
     parser.add_argument("--dataset-name", nargs="*", default=[])
@@ -24,6 +31,12 @@ def parse_args():
 
 
 def cache_model_assets(cfg):
+    """Download model, tokenizer, and processor assets used during PP7 runs.
+
+    Args:
+        cfg: Model configuration describing the required backbone and tokenizer
+            identifiers.
+    """
     print(f"Caching vision config: {cfg.vit_model_type}")
     AutoConfig.from_pretrained(cfg.vit_model_type)
 
@@ -46,6 +59,13 @@ def cache_model_assets(cfg):
 
 
 def cache_dataset(dataset_path, dataset_names, dataset_cache_dir):
+    """Download the requested dataset splits into the local Hugging Face cache.
+
+    Args:
+        dataset_path: Hugging Face dataset identifier.
+        dataset_names: Optional config names to download.
+        dataset_cache_dir: Optional destination cache directory.
+    """
     config_names = dataset_names or [None]
     for dataset_name in config_names:
         dataset_label = dataset_path if dataset_name is None else f"{dataset_path}/{dataset_name}"
@@ -59,6 +79,11 @@ def cache_dataset(dataset_path, dataset_names, dataset_cache_dir):
 
 
 def main():
+    """Warm the caches required to run PP7 on an offline machine later on.
+
+    Returns:
+        `None`. The function is executed for its side effects and console output.
+    """
     args = parse_args()
 
     cfg = VLMConfig(

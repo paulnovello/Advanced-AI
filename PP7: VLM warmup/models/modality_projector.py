@@ -1,12 +1,18 @@
+"""Exercise stub for the PP7 modality projector."""
+
 import torch.nn as nn
 
 
 class ModalityProjector(nn.Module):
-    def __init__(self, vision_hidden_dim, language_hidden_dim):
-        super().__init__()
-        self.vision_hidden_dim = vision_hidden_dim
-        self.language_hidden_dim = language_hidden_dim
-        self.proj = nn.Linear(vision_hidden_dim, language_hidden_dim, bias=False)
+    """Student implementation target for the modality projector exercise."""
 
-    def forward(self, x):
-        return self.proj(x)
+    def __init__(self, *args, **kwargs):
+        """Placeholder initializer for the exercise implementation.
+
+        Args:
+            *args: Positional arguments the student-defined projector may need.
+            **kwargs: Keyword arguments the student-defined projector may need.
+        """
+        super().__init__()
+
+    # TODO implement the modality projector.

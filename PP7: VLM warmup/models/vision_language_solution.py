@@ -1,3 +1,5 @@
+"""Main PP7 vision-language model used for training and generation."""
+
 import torch
 import torch.nn as nn
 
@@ -10,7 +12,15 @@ from models.utils import top_k_top_p_filtering
 
 
 class VisionLanguageModel(nn.Module):
+    """A lightweight VLM that injects projected visual tokens into an LM prompt."""
+
     def __init__(self, cfg: VLMConfig):
+        """Initialize the PP7 vision-language model.
+
+        Args:
+            cfg: Model configuration describing the backbone ids, tokenizer, and
+                prompt layout.
+        """
         super().__init__()
         self.cfg = cfg
 
@@ -29,25 +39,47 @@ class VisionLanguageModel(nn.Module):
         self.modality_projector = ModalityProjector(
             vision_hidden_dim=vision_hidden_dim,
             language_hidden_dim=language_hidden_dim,
-            scale_factor=cfg.mp_pixel_shuffle_factor,
         )
 
         image_size = self.vision_backbone.config.image_size
         patch_size = self.vision_backbone.config.patch_size
         grid_size = image_size // patch_size
-        self.cfg.mp_image_token_length = (
-            grid_size // self.cfg.mp_pixel_shuffle_factor
-        ) ** 2
+        self.cfg.mp_image_token_length = grid_size**2
 
     def _replace_img_tokens_with_embd(self, input_ids, token_embd, image_embd):
+        """Swap placeholder image-token embeddings with projected vision features.
+
+        Args:
+            input_ids: Token ids containing repeated image placeholder tokens.
+            token_embd: Text token embeddings of shape `[batch, seq_len, d_model]`.
+            image_embd: Projected visual embeddings of shape
+                `[batch, num_image_tokens, d_model]`.
+
+        Returns:
+            A copy of `token_embd` where the placeholder image token positions
+            have been overwritten with visual embeddings.
+        """
         updated_token_embd = token_embd.clone()
         image_mask = input_ids == self.tokenizer.image_token_id
+        # Boolean indexing flattens the selected positions, so the image embeddings are
+        # flattened to match the exact number of placeholder tokens in the prompt.
         updated_token_embd[image_mask] = image_embd.reshape(-1, image_embd.size(-1)).to(
             updated_token_embd.dtype
         )
         return updated_token_embd
 
     def forward(self, input_ids, pixel_values, attention_mask=None, labels=None):
+        """Run a teacher-forced training step and return logits plus loss.
+
+        Args:
+            input_ids: Prompt token ids.
+            pixel_values: Preprocessed image tensor for the vision backbone.
+            attention_mask: Optional attention mask aligned with `input_ids`.
+            labels: Optional labels using `-100` to ignore positions in the loss.
+
+        Returns:
+            A tuple `(logits, loss)` from the language model forward pass.
+        """
         token_embd = self.language_model.get_input_embeddings()(input_ids)
 
         vision_outputs = self.vision_backbone(
@@ -78,6 +110,21 @@ class VisionLanguageModel(nn.Module):
         temperature=0.8,
         greedy=False,
     ):
+        """Generate text continuations conditioned on image and prompt tokens.
+
+        Args:
+            input_ids: Prompt token ids including image placeholder tokens.
+            pixel_values: Preprocessed image tensor for the vision backbone.
+            attention_mask: Optional mask aligned with `input_ids`.
+            max_new_tokens: Maximum number of generated tokens.
+            top_k: Top-k cutoff applied before sampling.
+            top_p: Nucleus-sampling probability mass threshold.
+            temperature: Sampling temperature.
+            greedy: Whether to use argmax decoding instead of stochastic sampling.
+
+        Returns:
+            Generated token ids of shape `[batch, generated_length]`.
+        """
         token_embd = self.language_model.get_input_embeddings()(input_ids)
 
         vision_outputs = self.vision_backbone(
@@ -103,6 +150,7 @@ class VisionLanguageModel(nn.Module):
             if greedy:
                 next_token_id = torch.argmax(logits, dim=-1, keepdim=True)
             else:
+                # Filter the distribution before sampling to avoid very low-probability tails.
                 filtered_logits = top_k_top_p_filtering(
                     logits / temperature,
                     top_k=top_k,
@@ -127,6 +175,7 @@ class VisionLanguageModel(nn.Module):
                     dim=1,
                 )
 
+            # After the multimodal prefill, generation proceeds one token at a time via the KV cache.
             outputs = self.language_model(
                 inputs_embeds=next_token_embd,
                 attention_mask=current_attention_mask,

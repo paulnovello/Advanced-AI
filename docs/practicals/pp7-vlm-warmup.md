@@ -202,92 +202,152 @@ cat ~/job_results/err/job_job_id.err
 Or open it in vscode and refresh it when you want to check the output / error. One super convenient way to check the output on vscode is to click File > Add folder to workspace, then add the `job_results` folder. Then you can open the `out` and `err` folders in the vscode explorer alongside your code and open the output and error files of your job.
 
 
-## 5. Warmup on this semester project: easy VLM.
+## 2. Warmup on this semester project: easy VLM.
 
 As a warmup for this semester's project, you will launch a dummy training of a small VLM on [Flickr30k dataset](https://huggingface.co/datasets/AnyModal/flickr30k) after completing the missing parts of the modality projector and the "glue" code that combines the text and image features. The goal of this warmup is to get familiar with the model, the training loop, and the cluster environment before launching the real training for the project.
 
 ### Complete the missing parts
 
-Before launching your first training on the cluster, you will have to complete the missing parts in the code involved in training and generation, as in previous PPs. Start by reading `model.py` and `train.py` to understand the overall structure.
+Before launching your first training on the cluster, you will have to complete the missing parts in the code involved in training and generation, as in previous PPs. Start by reading `vision_language.py` to understand the structure of the VLM.
 
----
 
-#### `get_batch` in `train.py`
+#### Modality projector
 
-**What it does:** a simple data loader that samples random chunks from a memory-mapped binary file of token ids. Each call returns a batch of input-target pairs for next-token prediction.
+Go to `modality_projector.py` and use your imagination.
 
-The data is stored as a flat array of token ids. For a language model, the input `x` is a window of `block_size` consecutive tokens, and the target `y` is the same window shifted by one position (i.e., for each token in `x`, the target is the next token in the sequence).
+#### Glue code
 
-```python
-def get_batch(split):
-    ...
-    data = np.memmap(...)
-    ix = # TODO: sample batch_size random starting indices in [0, len(data) - block_size)
-    x  = # TODO: for each index i in ix, extract a chunk of block_size tokens as input
-    y  = # TODO: for each index i in ix, extract a chunk of block_size tokens shifted by 1 as target
-    ...
-```
-
-- `ix`: use `torch.randint` to sample `batch_size` random starting positions. The upper bound should ensure that a full window of `block_size` tokens fits.
-- `x`: for each starting index `i`, slice between `i` and `i + block_size`, convert to `np.int64`, wrap in a tensor, and stack all slices into a `(batch_size, block_size)` tensor.
-- `y`: same as `x`, but shifted by one.
-
----
-
-#### Training loop in `train.py`
-
-**What it does:** the forward-backward pass inside the gradient accumulation loop. The model receives input tokens `X` and must produce predictions that are compared against the targets `Y` using cross-entropy loss.
+Go to `vision_language.py`, complete the `forward`method:
 
 ```python
-for micro_step in range(gradient_accumulation_steps):
-    with ctx:
-        logits = # TODO: forward pass through the model
-        loss   = # TODO: compute the cross-entropy loss
-        loss = loss / gradient_accumulation_steps
-    ...
+def forward(self, input_ids, pixel_values, attention_mask=None, labels=None):
+    """Run one forward pass of the VLM during supervised training.
+
+    Args:
+        input_ids: Prompt token ids.
+        pixel_values: Preprocessed image tensor for the vision backbone.
+        attention_mask: Optional mask aligned with `input_ids`.
+        labels: Optional loss labels with ignored positions set to `-100`.
+
+    Returns:
+        A tuple `(logits, loss)` once the TODOs are implemented.
+    """
+    token_embd = self.language_model.get_input_embeddings()(input_ids)
+
+    vision_outputs = #TODO call the vision backbone with return_dict=True
+
+    vision_outputs = vision_outputs.last_hidden_state
+    image_embd = #TODO call the modality projector
+    token_embd = self._replace_img_tokens_with_embd(input_ids, token_embd, image_embd)
 ```
 
-- `logits`: call the model on `X`. The output has shape `(batch_size, block_size, vocab_size)`.
-- `loss`: use `F.cross_entropy`. You need to reshape `logits` to `(B*T, vocab_size)` and `Y` to `(B*T)`. Use `ignore_index=-1`.
-
----
-
-#### `generate` in `model.py`
-
-**What it does:** autoregressive text generation. Given a conditioning sequence of token ids, the model predicts one token at a time, appends it to the sequence, and repeats.
-
-The generation loop has the following steps:
-
-1. **Forward pass** — run the (possibly cropped) context through the model to get logits.
-2. **Select & scale** — take only the logits at the last time step and divide by the temperature.
-3. **Top-k filtering** — optionally zero out all logits outside the top-k most likely tokens.
-4. **Sample** — convert logits to probabilities with softmax, then sample one token.
-5. **Append** — concatenate the new token to the running sequence.
+and the `generate`method:
 
 ```python
-@torch.no_grad()
-def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
-    for _ in range(max_new_tokens):
-        idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
-        logits = # TODO: call the model on idx_cond
-        logits = # TODO: select the logits at the last time step (index -1), divide by temperature
-        if top_k is not None:
-            v, _ = # TODO: use torch.topk to get the top-k values
-            # TODO: set all logits below the smallest top-k value (v[:, [-1]]) to -float('Inf')
-        probs    = # TODO: apply softmax to get probabilities
-        idx_next = # TODO: sample from the distribution (torch.multinomial)
-        idx      = # TODO: concatenate idx_next to idx along dim 1
-    return idx
+@torch.inference_mode()
+def generate(
+    self,
+    input_ids,
+    pixel_values,
+    attention_mask=None,
+    max_new_tokens=30,
+    top_k=50,
+    top_p=0.9,
+    temperature=0.8,
+    greedy=False,
+):
+    """Autoregressively decode text conditioned on the image and prompt.
+
+    Args:
+        input_ids: Prompt token ids including image placeholder tokens.
+        pixel_values: Preprocessed image tensor for the vision backbone.
+        attention_mask: Optional mask aligned with `input_ids`.
+        max_new_tokens: Maximum number of generated tokens.
+        top_k: Top-k cutoff applied before sampling.
+        top_p: Nucleus-sampling probability mass threshold.
+        temperature: Sampling temperature.
+        greedy: Whether to use argmax decoding instead of stochastic sampling.
+
+    Returns:
+        Generated token ids of shape `[batch, generated_length]`.
+    """
+    # TODO How to get the logits from inputs_ids and pixel_values ?
+    
+    logits = outputs.logits[:, -1, :]
 ```
 
-- For the forward pass, simply call the model — the model's `forward` method returns logits of shape `(batch, seq_len, vocab_size)`.
-- `logits[:, -1, :]` selects the predictions for the last position. Dividing by `temperature` controls randomness: lower temperature → more deterministic.
-- `torch.topk` returns the `k` largest values; use the smallest of those as a threshold to mask everything else to `-Inf`.
-- `F.softmax(logits, dim=-1)` converts to probabilities; `torch.multinomial(probs, num_samples=1)` draws one sample per row.
-- `torch.cat((idx, idx_next), dim=1)` grows the sequence by one token.
+!!! Note
+    Since these two last methods use the modality projector, you might have to implement both parts altogether.
 
+You can test your implementation with:
+
+```bash
+run_apptainer_gpu
+Apptainer> uv run train.py
+```
+It will run a few-seconds training.
 
 ### Training on Flickr30k
 
 
+To perform a longer training, you can play with the parameters of `train.py`:
 
+
+- `--dataset-path` (default: `AnyModal/flickr30k`): Hugging Face dataset identifier to load.
+- `--dataset-name` (default: empty): Optional dataset configuration names. You can pass several values; the script loads and concatenates them.
+- `--dataset-cache-dir` (default: `None`): Path to a local Hugging Face datasets cache, useful if the dataset was pre-downloaded.
+- `--train-samples` (default: `2560`): Number of training samples kept after the train/validation split.
+- `--val-samples` (default: `16`): Number of validation samples reserved from the dataset. Set `0` to disable validation.
+- `--batch-size` (default: `5`): Batch size used by the dataloaders.
+- `--max-steps` (default: `50`): Number of training steps to run.
+- `--eval-interval` (default: `5`): Validation frequency in training steps.
+- `--gradient-accumulation-steps` (default: `3`): Number of forward/backward passes accumulated before one optimizer step.
+- `--num-workers` (default: `0`): Number of PyTorch dataloader worker processes.
+- `--max-length` (default: `1024`): Maximum tokenized sequence length accepted by the collator.
+- `--lr-projector` (default: `1e-3`): Learning rate for the modality projector.
+- `--lr-vision` (default: `0.0`): Learning rate for the vision backbone. With `0.0`, the vision model is not optimized.
+- `--lr-language` (default: `0.0`): Learning rate for the language model. With `0.0`, the language model is not optimized.
+- `--weight-decay` (default: `0.0`): Weight decay used by `AdamW`.
+- `--max-grad-norm` (default: `1.0`): Gradient clipping threshold.
+- `--vit-model` (default: `google/siglip2-base-patch16-512`): Hugging Face identifier of the vision backbone.
+- `--lm-model` (default: `HuggingFaceTB/SmolLM2-135M-Instruct`): Hugging Face identifier of the language model.
+- `--tokenizer` (default: `None`): Optional tokenizer identifier. If omitted, the script uses the same identifier as `--lm-model`.
+- `--split-seed` (default: `0`): Random seed used for the train/validation split.
+- `--output-dir` (default: `checkpoints`): Directory where the checkpoint is written.
+- `--output-name` (default: `projector.pt`): Filename of the saved checkpoint.
+- `--compile` (flag, disabled by default): If provided, wraps the model with `torch.compile()` before training.
+
+Example:
+
+```bash
+uv run train.py --train-samples 10000 --val-samples 128 --max-steps 500 --output-name projector_long.pt
+```
+
+Try to understand every possible arguments and to make the most of a $\approx$ 5 minutes training.
+
+### Generating text from text+image
+
+Now that you have trained your model, you can test it in generation mode with `generate.py`. This script loads a checkpoint and generates text from an input image and a text prompt. You can play with the following parameters:
+
+
+- `--checkpoint` (default: `None`): Path to a saved checkpoint. If omitted, generation uses the model with default randomly initialized projector weights.
+- `--image` (required): Path to the input image.
+- `--prompt` (default: `What is in the image?`): Text prompt appended after the image placeholder tokens.
+- `--max-new-tokens` (default: `40`): Maximum number of tokens to generate.
+- `--top-k` (default: `50`): Top-k cutoff used during sampling.
+- `--top-p` (default: `0.9`): Nucleus sampling threshold.
+- `--temperature` (default: `0.8`): Sampling temperature.
+- `--greedy` (flag, disabled by default): If provided, uses greedy decoding instead of stochastic sampling.
+
+Example:
+
+```bash
+uv run generate.py --checkpoint checkpoints/projector.pt --image my_image.jpg --prompt "Describe this image."
+```
+Fetch any image you want e.g. on google image. Click on the image, and in the original website right click and select "copy image url". It gets you a url like `https://www.mydomain.com/my_image.jpg`. Then you can download it with `wget`:
+
+```bash
+wget https://www.mydomain.com/my_image.jpg -O my_image.jpg)
+```
+
+and use it for generation.

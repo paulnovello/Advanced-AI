@@ -1,3 +1,5 @@
+"""Training script for the PP7 warmup vision-language model."""
+
 import argparse
 import itertools
 import os
@@ -19,6 +21,12 @@ from models.vision_language import VisionLanguageModel
 
 
 def parse_args():
+    """Parse command-line arguments for a PP7 training run.
+
+    Returns:
+        An `argparse.Namespace` containing dataset, optimization, and model
+        settings for the training script.
+    """
     parser = argparse.ArgumentParser(description="Warmup VLM training script")
     parser.add_argument("--dataset-path", type=str, default="AnyModal/flickr30k")
     parser.add_argument("--dataset-name", nargs="*", default=[])
@@ -31,7 +39,7 @@ def parse_args():
     parser.add_argument("--train-samples", type=int, default=2560)
     parser.add_argument("--val-samples", type=int, default=16)
     parser.add_argument("--batch-size", type=int, default=5)
-    parser.add_argument("--max-steps", type=int, default=50)
+    parser.add_argument("--max-steps", type=int, default=10)
     parser.add_argument("--eval-interval", type=int, default=5)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=3)
     parser.add_argument("--num-workers", type=int, default=0)
@@ -56,6 +64,11 @@ def parse_args():
 
 
 def get_device():
+    """Select the best available local accelerator.
+
+    Returns:
+        A `torch.device` pointing to CUDA, MPS, or CPU.
+    """
     if torch.cuda.is_available():
         return torch.device("cuda")
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
@@ -69,6 +82,17 @@ def load_training_dataset(
     total_samples,
     dataset_cache_dir=None,
 ):
+    """Load and optionally concatenate one or more training dataset configs.
+
+    Args:
+        dataset_path: Hugging Face dataset identifier.
+        dataset_names: Optional list of config names to load and concatenate.
+        total_samples: Maximum number of samples to keep after shuffling.
+        dataset_cache_dir: Optional datasets cache directory.
+
+    Returns:
+        A shuffled Hugging Face dataset ready to be split.
+    """
     datasets = []
     config_names = dataset_names or [None]
     for dataset_name in config_names:
@@ -90,6 +114,20 @@ def load_training_dataset(
 
 
 def split_dataset(dataset, train_samples, val_samples, split_seed):
+    """Split a dataset into train/validation subsets with deterministic sampling.
+
+    Args:
+        dataset: Dataset to split.
+        train_samples: Number of training samples to keep, or `None` to keep all.
+        val_samples: Number of validation samples to reserve.
+        split_seed: Random seed for the split operation.
+
+    Returns:
+        A tuple `(train_dataset, val_dataset)` where `val_dataset` may be `None`.
+
+    Raises:
+        ValueError: If the requested split sizes are invalid.
+    """
     if val_samples < 0:
         raise ValueError("`val_samples` must be non-negative.")
 
@@ -114,6 +152,14 @@ def split_dataset(dataset, train_samples, val_samples, split_seed):
 
 
 def infer_num_image_tokens(vit_model_type):
+    """Infer how many patch tokens the vision backbone emits per image.
+
+    Args:
+        vit_model_type: Hugging Face identifier for the vision backbone.
+
+    Returns:
+        Number of patch tokens produced for one image.
+    """
     config = AutoConfig.from_pretrained(vit_model_type)
     vision_config = config.vision_config if hasattr(config, "vision_config") else config
     grid_size = vision_config.image_size // vision_config.patch_size
@@ -121,6 +167,17 @@ def infer_num_image_tokens(vit_model_type):
 
 
 def build_dataloader(dataset, cfg, train_cfg, shuffle):
+    """Wrap a raw HF dataset in the PP7 dataset/collator pipeline.
+
+    Args:
+        dataset: Raw dataset split.
+        cfg: Model configuration.
+        train_cfg: Training configuration.
+        shuffle: Whether to shuffle samples each epoch.
+
+    Returns:
+        A `DataLoader` yielding PP7 multimodal batches.
+    """
     tokenizer = get_tokenizer(cfg.lm_tokenizer, cfg.image_token)
     image_processor = get_image_processor(cfg.vit_model_type)
     vqa_dataset = VQADataset(
@@ -140,6 +197,17 @@ def build_dataloader(dataset, cfg, train_cfg, shuffle):
 
 
 def run_model_on_batch(model, batch, device, device_type):
+    """Move a batch to the device, run the model, and return the scalar loss.
+
+    Args:
+        model: Vision-language model to execute.
+        batch: Batch dictionary produced by the collator.
+        device: Target device for tensors.
+        device_type: String passed to autocast, e.g. `"cuda"` or `"cpu"`.
+
+    Returns:
+        The scalar training loss tensor for the batch.
+    """
     input_ids = batch["input_ids"].to(device)
     attention_mask = batch["attention_mask"].to(device)
     labels = batch["labels"].to(device)
@@ -163,6 +231,17 @@ def run_model_on_batch(model, batch, device, device_type):
 
 @torch.inference_mode()
 def evaluate(model, dataloader, device, device_type):
+    """Compute the mean validation loss over the provided dataloader.
+
+    Args:
+        model: Vision-language model to evaluate.
+        dataloader: Validation dataloader.
+        device: Target device for tensors.
+        device_type: String passed to autocast.
+
+    Returns:
+        Mean validation loss as a Python float, or `nan` if no batch was valid.
+    """
     model.eval()
     losses = []
 
@@ -181,6 +260,15 @@ def evaluate(model, dataloader, device, device_type):
 
 
 def build_optimizer(model, train_cfg):
+    """Build optimizer parameter groups and freeze disabled submodules.
+
+    Args:
+        model: Vision-language model whose parameters should be optimized.
+        train_cfg: Training configuration containing learning rates and weight decay.
+
+    Returns:
+        An `AdamW` optimizer over the enabled parameter groups.
+    """
     parameter_groups = []
 
     if train_cfg.lr_projector > 0:
@@ -214,6 +302,13 @@ def build_optimizer(model, train_cfg):
 
 
 def save_checkpoint(model, cfg, path):
+    """Persist the projector weights and model config for later reuse.
+
+    Args:
+        model: Trained vision-language model.
+        cfg: Configuration saved alongside the weights.
+        path: Destination checkpoint path.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     torch.save(
         {
@@ -225,6 +320,12 @@ def save_checkpoint(model, cfg, path):
 
 
 def main():
+    """Execute the full PP7 training loop.
+
+    Returns:
+        `None`. The function is executed for its side effects: training,
+        evaluation, and checkpoint writing.
+    """
     args = parse_args()
 
     vlm_cfg = VLMConfig(
@@ -305,6 +406,7 @@ def main():
         loss = run_model_on_batch(model, batch, device, device_type)
         train_loss_value = loss.item()
 
+        # Gradient accumulation keeps the effective batch size larger than what fits per step.
         loss = loss / train_cfg.gradient_accumulation_steps
         loss.backward()
 
