@@ -85,7 +85,7 @@ alias run_apptainer_gpu="srun -p shared -n1 --gres=gpu:1 --pty apptainer shell \
 --env PATH=$HOME/.local/bin:$PATH \
 --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai \
 --env UV_NO_SYNC=true \
---env HF_HOME=/work/formation/YOUR_USERNAME/huggingface\
+--env HF_HOME=/work/formation/YOUR_USERNAME/huggingface \
 --env HF_HUB_OFFLINE=1 \
 --env HF_DATASETS_OFFLINE=1 \
 --env TRANSFORMERS_OFFLINE=1 \
