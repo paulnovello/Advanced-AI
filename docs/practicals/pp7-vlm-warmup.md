@@ -1,7 +1,13 @@
 # Programming Practical 5 - Pretraining GPT2 on a cluster
 
+This practical has two goals. First, you will set up and use the TURPAN cluster environment to run Python code inside the course Apptainer container, both interactively and through Slurm jobs. Second, you will apply this workflow to a vision-language model (VLM) exercise based on Flickr30k.
+
+In the VLM part, you will complete the missing pieces of the modality projector and of the glue code between the vision backbone and the language model, then launch a short training run and test generation on an image-prompt pair. The point of this PP is not to train a strong model yet, but to make sure that you can navigate the codebase, understand the training pipeline, and run experiments correctly on the cluster before starting the full semester project.
+
 
 ## 1. Cheatsheet on TURPAN cluster
+
+Please read this cheatsheet since it contains some updated instructions compared to last Turpan training. Especially, the reservation argument for slurm and some envs arguments for Apptainer that allow to work with HuggingFace.
 
 ### Logging in the cluster
 
@@ -109,7 +115,7 @@ For long scirpts, often running overnight, you do not want to keep your terminal
 #SBATCH --gres=gpu:1
 #SBATCH -p shared
 #SBATCH --time=00:15:00 
-#SBATCH --reservation=tpirt4
+#SBATCH --reservation=tpirt5 # CHANGE THIS ACCORDING TO THE SCHEDULE
 #SBATCH --output=/users/formation/YOUR_USERNAME/job_results/out/job_%j.out
 #SBATCH --error=/users/formation/YOUR_USERNAME/job_results/err/job_%j.err
 
@@ -144,7 +150,8 @@ You can find this tamplate on `sbatch_scripts/template.sbatch` in the project. T
 Let's call this file `run_job.sbatch`. You can submit this job to the cluster with:
 
 ```bash
-sbatch --reservation=tpirt4 run_job.sbatch
+# CHANGE THE RESERVATION ACCORDING TO THE SCHEDULE
+sbatch --reservation=tpirt5 run_job.sbatch
 ```
 
 and check the status of your job with:
