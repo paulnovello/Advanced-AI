@@ -353,7 +353,7 @@ uv run generate.py --checkpoint checkpoints/projector.pt --image my_image.jpg --
 Fetch any image you want e.g. on google image. Click on the image, and in the original website right click and select "copy image url". It gets you a url like `https://www.mydomain.com/my_image.jpg`. Then you can download it with `wget`:
 
 ```bash
-wget https://www.mydomain.com/my_image.jpg -O my_image.jpg)
+wget https://www.mydomain.com/my_image.jpg -O my_image.jpg
 ```
 
 and use it for generation.
