@@ -133,7 +133,7 @@ apptainer exec \
 uv run python mon_script.py
 ```
 
-You can find this tamplate on `sbatch_scripts/template.sbatch` in the project. Take the time to understand each `#SBATCH` line of the script:
+Take the time to understand each `#SBATCH` line of the script:
 
 - `--nodes 1`: Number of nodes to use (1 in our case)
 - `--ntasks 1`: Number of tasks to run (1 in our case, it is the number of times the command will be run.
