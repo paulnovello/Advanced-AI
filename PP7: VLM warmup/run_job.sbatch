@@ -16,4 +16,4 @@ apptainer exec \
 --env UV_PROJECT_ENVIRONMENT=/tmpdir/tpirtbgchs/envs/aai \
 --bind /tmpdir,/work \
 --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif \
-uv run python mon_script.py
+uv run uv run train.py --train-samples 10000 --val-samples 128 --max-steps 500 --output-name projector_long.pt
