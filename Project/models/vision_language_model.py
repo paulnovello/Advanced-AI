@@ -42,10 +42,10 @@ import torch.nn.functional as F
 from safetensors.torch import load_model, save_model
 
 from models.config import VLMConfig
-from models.vision_transformer import ViT
-from models.language_model import LanguageModel
-from models.modality_projector import ModalityProjector
-from data.processors import get_tokenizer
+from models.vision_transformer import ViT  # noqa: F401
+from models.language_model import LanguageModel  # noqa: F401
+from models.modality_projector import ModalityProjector  # noqa: F401
+from data.processors import get_tokenizer  # noqa: F401
 
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("inf")):
@@ -76,16 +76,16 @@ class VisionLanguageModel(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        if load_backbone:
-            print("Loading backbone weights from HuggingFace …")
-            self.vision_encoder = ViT.from_pretrained(cfg.vit)
-            self.decoder = LanguageModel.from_pretrained(cfg.lm)
-        else:
-            self.vision_encoder = ViT(cfg.vit)
-            self.decoder = LanguageModel(cfg.lm)
+        # self.vision_encoder = ...   # the ViT image encoder
+        #   if load_backbone: use ViT.from_pretrained(cfg.vit)
+        #   else:             use ViT(cfg.vit)
+        # self.decoder = ...          # the causal language model
+        #   if load_backbone: use LanguageModel.from_pretrained(cfg.lm)
+        #   else:             use LanguageModel(cfg.lm)
+        # self.MP = ...               # the ModalityProjector
+        # self.tokenizer = ...        # the tokenizer (use get_tokenizer)
 
-        self.MP = ModalityProjector(cfg)
-        self.tokenizer = get_tokenizer(cfg.lm.tokenizer, cfg.image_token)
+        raise NotImplementedError
 
     # ── PROVIDED — image token replacement ───────────────────────────────────
     def _replace_img_tokens_with_embd(self, input_ids, token_embd, image_embd):

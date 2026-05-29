@@ -37,16 +37,14 @@ class ModalityProjector(nn.Module):
         After pixel_shuffle:  [B, projector.image_token_length, input_dim]
         After self.proj:       [B, projector.image_token_length, lm.hidden_dim]
 
-        TODO: store the necessary attributes and create self.proj (nn.Linear).
-              No bias is needed.
         """
         super().__init__()
         self.pixel_shuffle_factor = cfg.projector.pixel_shuffle_factor  # 4
 
-        # TODO: Compute self.input_dim as the ViT hidden dimension multiplied
-        #       by the square of the pixel shuffle factor. Set self.output_dim
-        #       to the LM hidden dimension. Create self.proj as a bias-free
-        #       linear layer mapping input_dim to output_dim.
+        # self.input_dim = ...    # vit.hidden_dim × pixel_shuffle_factor²
+        #                         # (embedding size after merging neighbouring patches)
+        # self.output_dim = ...
+        # self.proj = ...         # bias-free Linear: input_dim → output_dim
 
         raise NotImplementedError
 
