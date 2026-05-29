@@ -33,18 +33,24 @@ def device():
 
 class TestViTPretrainedLoading:
     def test_loads_without_error(self, cfg):
+        """ViT.from_pretrained must complete without raising an exception.
+
+        Any attribute name mismatch (e.g. wrong conv or qkv_proj name) causes
+        a key error when loading the state_dict — fix your __init__ first.
+        """
         from models.vision_transformer import ViT
         model = ViT.from_pretrained(cfg.vit)
         assert model is not None
 
     def test_parameter_count(self, cfg):
+        """SigLIP2-base-patch16-512 has ~86 M parameters."""
         from models.vision_transformer import ViT
         model = ViT.from_pretrained(cfg.vit)
         n = sum(p.numel() for p in model.parameters())
-        # SigLIP2-base has ~86M parameters
         assert 80_000_000 < n < 100_000_000, f"Unexpected param count: {n:,}"
 
     def test_forward_shape(self, cfg, device):
+        """A 512×512 image must produce [1, 1024, 768] features."""
         from models.vision_transformer import ViT
         model = ViT.from_pretrained(cfg.vit).to(device).eval()
         x = torch.randn(1, 3, 512, 512, device=device)
@@ -55,18 +61,24 @@ class TestViTPretrainedLoading:
 
 class TestLMPretrainedLoading:
     def test_loads_without_error(self, cfg):
+        """LanguageModel.from_pretrained must complete without exceptions.
+
+        Any attribute name mismatch (e.g. wrong q_proj or out_proj name) causes
+        a key error when loading the state_dict — fix your __init__ first.
+        """
         from models.language_model import LanguageModel
         model = LanguageModel.from_pretrained(cfg.lm)
         assert model is not None
 
     def test_parameter_count(self, cfg):
+        """SmolLM2-360M-Instruct has ~362 M parameters."""
         from models.language_model import LanguageModel
         model = LanguageModel.from_pretrained(cfg.lm)
         n = sum(p.numel() for p in model.parameters())
-        # SmolLM2-360M has ~360M parameters
         assert 300_000_000 < n < 420_000_000, f"Unexpected param count: {n:,}"
 
     def test_forward_shape(self, cfg, device):
+        """With real weights, forward must return hidden states [1, T, 960]."""
         from models.language_model import LanguageModel
         model = LanguageModel.from_pretrained(cfg.lm).to(device).eval()
         x = torch.randn(1, 32, cfg.lm.hidden_dim, device=device)
@@ -75,7 +87,7 @@ class TestLMPretrainedLoading:
         assert hidden.shape == (1, 32, cfg.lm.hidden_dim)
 
     def test_kv_cache_consistency_with_pretrained(self, cfg, device):
-        """After loading real weights, prefill+decode must equal full forward."""
+        """With real weights loaded, prefill+decode must match full forward."""
         from models.language_model import LanguageModel
         torch.manual_seed(0)
         model = LanguageModel.from_pretrained(cfg.lm).to(device).eval()
@@ -94,7 +106,12 @@ class TestLMPretrainedLoading:
 
 class TestVLMPretrainedForward:
     def test_vlm_forward_with_pretrained_weights(self, cfg, device):
-        """Full VLM forward pass with pretrained ViT + LM."""
+        """Full VLM forward pass with pretrained ViT + LM weights.
+
+        Verifies that all components wire together correctly end-to-end:
+        image → ViT → projector → LM → logits.  If loss is NaN, check your
+        cross-entropy masking (image token positions use ignore_index=-100).
+        """
         from models.vision_language_model import VisionLanguageModel
         model = VisionLanguageModel(cfg, load_backbone=True).to(device).eval()
         tokenizer = model.tokenizer

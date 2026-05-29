@@ -130,36 +130,29 @@ class VisionLanguageModel(nn.Module):
 
         Step-by-step guide:
         ──────────────────
-        TODO 1 — Embed text tokens:
-            token_embd = self.decoder.token_embedding(input_ids)   → [B, T, 960]
+        TODO 1 — Embed the input token ids into the LM's embedding space.
+                 Output: [B, T, 960]
 
-        TODO 2 — Encode image(s):
-            images = self._process_images(pixel_values, input_ids.device)
-            image_feats = self.vision_encoder(images)               → [B, 1024, 768]
+        TODO 2 — Pre-process the images and run them through the vision
+                 encoder.
+                 Output: [B, 1024, 768]
 
-        TODO 3 — Project to LM space:
-            image_embd = self.MP(image_feats)                       → [B, 64, 960]
+        TODO 3 — Project the visual features to the LM's embedding space
+                 via the modality projector.
+                 Output: [B, 64, 960]
 
-        TODO 4 — Merge visual and text embeddings:
-            token_embd = self._replace_img_tokens_with_embd(
-                input_ids, token_embd, image_embd
-            )
+        TODO 4 — Replace the image placeholder tokens in the sequence with
+                 the projected visual embeddings.
 
-        TODO 5 — Language model forward:
-            hidden, _ = self.decoder(token_embd, attention_mask=attention_mask)
-            # hidden: [B, T, 960]
+        TODO 5 — Run the merged embedding sequence through the language
+                 model.
+                 Output: hidden [B, T, 960]
 
-        TODO 6 — Loss (only when targets are provided):
-            logits = self.decoder.head(hidden)                      → [B, T, 49153]
-            loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                targets.view(-1),
-                ignore_index=-100,
-            )
-            return logits, loss
+        TODO 6 — If targets are provided: apply the language model head to
+                 get logits, compute cross-entropy loss (ignore_index=-100),
+                 and return (logits, loss).
 
-        TODO 7 — No targets: return hidden states (used during generation):
-            return hidden, None
+        TODO 7 — If no targets: return (hidden, None) for generation.
         """
         raise NotImplementedError
 

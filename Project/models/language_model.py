@@ -46,8 +46,8 @@ class RMSNorm(nn.Module):
         Hint: torch.rsqrt(t) computes 1/sqrt(t) element-wise.
               Take the mean over the last dimension (keepdim=True).
         """
-        # TODO: irms = rsqrt( mean(x², dim=-1, keepdim=True) + self.rms_eps )
-        #       return x * irms * self.weight
+        # TODO: Compute the inverse RMS of x along the last dimension
+        #       (keepdim=True), then scale x by it and the learned weight.
         raise NotImplementedError
 
 
@@ -108,26 +108,20 @@ class RotaryEmbedding(nn.Module):
             cos: [B, T, dim]
             sin: [B, T, dim]
 
-        TODO 1 — Dynamic scaling for long sequences:
-            max_seq = position_ids.max() + 1
-            if max_seq > self.max_position_embeddings:
-                scale = max_seq / self.max_position_embeddings
-                inv_freq = self.inv_freq / scale
-            else:
-                inv_freq = self.inv_freq
+        TODO 1 — Scale down the stored frequencies proportionally if the
+                 sequence is longer than the precomputed maximum length.
 
-        TODO 2 — Per-position frequencies:
-            flat = position_ids.reshape(-1).float()  → [B*T]
-            freqs = flat.unsqueeze(-1) * inv_freq.unsqueeze(0)  → [B*T, dim/2]
-            freqs = freqs.reshape(B, T, -1)          → [B, T, dim/2]
+        TODO 2 — Flatten position_ids to a 1-D vector, then use unsqueeze
+                 to broadcast it against inv_freq so you get one frequency
+                 per (position, dimension) pair.
+                 Reshape back to [B, T, dim/2].
 
-        TODO 3 — Duplicate to full head dim:
-            emb = torch.cat([freqs, freqs], dim=-1)  → [B, T, dim]
+        TODO 3 — Concatenate freqs with itself along the last dimension to
+                 cover both halves of the head dimension.
+                 Result: [B, T, dim]
 
-        TODO 4 — Scale and return:
-            cos = torch.cos(emb) * self.attn_scaling
-            sin = torch.sin(emb) * self.attn_scaling
-            return cos, sin
+        TODO 4 — Compute cosine and sine of the embeddings, scale each by
+                 attn_scaling, and return both.
         """
         raise NotImplementedError
 
@@ -203,42 +197,37 @@ class LMAttention(nn.Module):
             output:         [B, T_curr, 960]
             block_kv_cache: updated cache dict
 
-        TODO 1 — Project:
-            q: [B, n_heads,    T_curr, head_dim]  via q_proj + reshape + T
-            k: [B, n_kv_heads, T_curr, head_dim]  via k_proj + reshape + T
-            v: same shape as k                     via v_proj
+        TODO 1 — Project x with q_proj, k_proj, v_proj separately. Use view
+                 to split the last dimension into (n_heads, head_dim) or
+                 (n_kv_heads, head_dim), then transpose to put heads first.
+                 q:   [B, n_heads,    T_curr, head_dim]
+                 k,v: [B, n_kv_heads, T_curr, head_dim]
 
-        TODO 2 — Rotary embeddings:
-            q, k_rotated = apply_rotary_pos_embd(q, k, cos, sin)
+        TODO 2 — Apply the rotary positional embeddings to queries and keys.
 
-        TODO 3 — KV cache:
-            Prefill  (block_kv_cache is None):
-                k = k_rotated;  v = v_curr
-                block_kv_cache = {'key': k, 'value': v}
-            Decode (cache exists):
-                k = cat([block_kv_cache['key'],   k_rotated], dim=2)
-                v = cat([block_kv_cache['value'], v_curr],    dim=2)
-                block_kv_cache = {'key': k, 'value': v}
+        TODO 3 — On the first (prefill) call initialize the cache with the
+                 current K and V. On subsequent (decode) calls, concatenate
+                 the cached K and V before the current ones along the
+                 sequence dimension (dim=2).
 
-        TODO 4 — Expand K/V for GQA:
-            k_exp = k.repeat_interleave(n_kv_groups, dim=1) → [B, 15, T_kv, 64]
-            v_exp = v.repeat_interleave(n_kv_groups, dim=1)
+        TODO 4 — Use repeat_interleave along the head dimension (dim=1) to
+                 replicate each KV head n_kv_groups times, so every query
+                 head has a matching key and value.
+                 k_exp, v_exp: [B, n_heads, T_kv, head_dim]
 
-        TODO 5 — Additive padding mask (optional):
-            if attention_mask is not None:
-                T_kv = k_exp.size(2)
-                mask = attention_mask[:, :T_kv]           # [B, T_kv]
-                additive = (1.0 - mask.unsqueeze(1).unsqueeze(2).float())
-                           * torch.finfo(q.dtype).min     # [B, 1, 1, T_kv]
+        TODO 5 — Build an additive mask: padding positions should become the
+                 most negative float in q's dtype (use torch.finfo to get
+                 it). Use two unsqueezes to broadcast over the batch and
+                 head dimensions.
 
-        TODO 6 — SDPA:
-            is_causal = (T_curr == T_kv and T_curr > 1)
-            F.scaled_dot_product_attention(q, k_exp, v_exp,
-                attn_mask=additive, dropout_p=…, is_causal=is_causal)
+        TODO 6 — Call scaled_dot_product_attention with the additive mask.
+                 Set is_causal=True only when T_curr equals T_kv and
+                 T_curr > 1 (prefill, not single-token decoding).
 
-        TODO 7 — Merge heads + project:
-            y = y.transpose(1,2).contiguous().view(B, T_curr, C)
-            return self.resid_dropout(self.out_proj(y)), block_kv_cache
+        TODO 7 — Transpose the head and sequence dimensions back, call
+                 contiguous to fix the memory layout, then collapse heads
+                 into the channel dimension with view. Apply out_proj and
+                 resid_dropout, and return together with the updated cache.
         """
         raise NotImplementedError
 
@@ -263,8 +252,8 @@ class LMMLP(nn.Module):
         """
         Args/Returns: [B, T, hidden_dim]
 
-        TODO: gate = F.silu(self.gate_proj(x))
-              return self.down_proj(gate * self.up_proj(x))
+        TODO: Apply silu to the gate projection, multiply element-wise
+              with the up projection, then project back down.
         """
         raise NotImplementedError
 
@@ -290,14 +279,10 @@ class LMBlock(nn.Module):
             x:              [B, T, hidden_dim]
             block_kv_cache: updated dict
 
-        Pattern (same as ViTBlock, but attention also returns the cache):
-            res = x
-            x = self.norm1(x)
-            x, block_kv_cache = self.attn(x, cos, sin, attention_mask, …)
-            x = res + x
-            …
+        Follow the same pre-norm residual pattern as ViTBlock, but
+        attention returns a (output, cache) tuple — unpack it.
         """
-        # TODO: two pre-norm residual sub-layers.
+        # TODO: Two pre-norm residual sub-layers (attention, then MLP).
         raise NotImplementedError
 
 
@@ -358,19 +343,21 @@ class LanguageModel(nn.Module):
             hidden:   [B, T, hidden_dim]
             kv_cache: updated list of per-block dicts
 
-        TODO 1: B, T_curr, _ = x.size()
+        TODO 1: Unpack batch size and current sequence length from x.
 
-        TODO 2: position_ids = arange(start_pos, start_pos+T_curr)
-                broadcast to [B, T_curr], call self.rotary_embd(position_ids)
+        TODO 2: Use arange to build integer position indices from start_pos
+                to start_pos+T_curr, expand to [B, T_curr], then compute
+                the rotary cos/sin embeddings.
 
-        TODO 3: if kv_cache is None: kv_cache = [None] * len(self.blocks)
+        TODO 3: Initialize the KV cache as a list of None values (one entry
+                per block) if no cache was passed in.
 
-        TODO 4: for i, block in enumerate(self.blocks):
-                    x, kv_cache[i] = block(x, cos, sin, attention_mask, …)
+        TODO 4: Loop over the blocks, passing updated hidden states and
+                writing each block's returned cache back into the list.
 
-        TODO 5: x = self.norm(x)
+        TODO 5: Apply the final RMS normalization.
 
-        TODO 6: return x, kv_cache
+        TODO 6: Return the hidden states and the updated KV cache.
         """
         raise NotImplementedError
 

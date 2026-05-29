@@ -58,7 +58,11 @@ B, T = 2, 128
 
 class TestVLMForward:
     def test_forward_without_targets(self, cfg, model):
-        """Without targets, forward returns hidden states, no loss."""
+        """Without targets, forward returns hidden states and loss=None.
+
+        Output shape: [B, T, lm.hidden_dim].  The model runs the full pipeline
+        (ViT → projector → LM) but skips the loss computation.
+        """
         input_ids = torch.randint(0, cfg.lm.vocab_size, (B, T))
         pixel_values = torch.randn(B, 3, 512, 512)
         attention_mask = torch.ones(B, T, dtype=torch.long)
@@ -69,13 +73,19 @@ class TestVLMForward:
         input_ids[:, :cfg.projector.image_token_length] = image_token_id
 
         with torch.no_grad():
-            out, loss = model(input_ids, pixel_values, attention_mask, targets=None)
+            out, loss = model(
+                input_ids, pixel_values, attention_mask, targets=None
+            )
 
         assert loss is None
         assert out.shape == (B, T, cfg.lm.hidden_dim)
 
     def test_forward_with_targets(self, cfg, model):
-        """With targets, forward returns logits and a finite scalar loss."""
+        """With targets, forward returns logits [B,T,vocab_size] and a scalar loss.
+
+        Loss must be finite — NaN or inf means a gradient explosion or broken
+        cross-entropy masking (image positions must use ignore_index=-100).
+        """
         input_ids = torch.randint(0, cfg.lm.vocab_size, (B, T))
         pixel_values = torch.randn(B, 3, 512, 512)
         attention_mask = torch.ones(B, T, dtype=torch.long)
@@ -97,7 +107,12 @@ class TestVLMForward:
         assert torch.isfinite(loss)
 
     def test_image_token_replacement(self, cfg, model):
-        """Positions with image tokens must have different embeddings."""
+        """Image-token positions must be replaced by projected visual embeddings.
+
+        The first n=image_token_length positions are set to the image token id.
+        After _replace_img_tokens_with_embd those positions carry projected ViT
+        features instead of text embeddings.  Output shape must be preserved.
+        """
         n_img = cfg.projector.image_token_length
         T_short = n_img + 10
         input_ids = torch.randint(1, cfg.lm.vocab_size - 1, (1, T_short))

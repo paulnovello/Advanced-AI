@@ -71,17 +71,16 @@ class ViTPatchEmbeddings(nn.Module):
         Returns:
             [B, num_patches, hidden_dim]  =  [B, 1024, 768]
         """
-        # TODO 1: Apply self.conv(x)
-        #         Input:  [B, 3, 512, 512]
+        # TODO 1: Apply the convolutional patch extractor.
         #         Output: [B, hidden_dim, 32, 32]
 
-        # TODO 2: Flatten spatial dims (dim 2 and 3).
+        # TODO 2: Flatten the two spatial dimensions into one.
         #         Output: [B, hidden_dim, 1024]
 
-        # TODO 3: Transpose dims 1 and 2.
+        # TODO 3: Swap the patch and channel dimensions.
         #         Output: [B, 1024, hidden_dim]
 
-        # TODO 4: Add self.position_embedding (broadcasts over batch dim).
+        # TODO 4: Add the learned position embeddings to each patch token.
         #         Output: [B, 1024, hidden_dim]
 
         raise NotImplementedError
@@ -124,22 +123,28 @@ class ViTAttention(nn.Module):
         """
         B, T, C = x.size()
 
-        # TODO 1: qkv = self.qkv_proj(x)   → [B, T, 3*C]
-        #         split into q, k, v, each  → [B, T, C]
+        # TODO 1: Project x to queries, keys, and values in one shot with
+        #         qkv_proj, then split into three equal chunks along the
+        #         last dimension.
+        #         q, k, v each → [B, T, C]
 
-        # TODO 2: reshape each to [B, T, n_heads, head_dim]
-        #         then transpose to [B, n_heads, T, head_dim]
+        # TODO 2: Use view to introduce the head dimension, then transpose
+        #         so heads come before the sequence.
+        #         Each of q, k, v → [B, n_heads, T, head_dim]
 
-        # TODO 3: attend.
+        # TODO 3: Attend.
         #   If self.sdpa:
-        #       F.scaled_dot_product_attention(q, k, v,
-        #           dropout_p=self.dropout if self.training else 0.0,
-        #           is_causal=False)   ← ViT is BIDIRECTIONAL
+        #       Use scaled_dot_product_attention; set is_causal=False
+        #       because the vision encoder attends to all patches in
+        #       both directions.
         #   Else (fallback):
         #       scores = q @ k.T / sqrt(head_dim), softmax, dropout, @ v
 
-        # TODO 4: [B, n_heads, T, head_dim] → [B, T, C]
-        #         apply self.out_proj then self.resid_dropout
+        # TODO 4: Transpose the head and sequence dimensions back, call
+        #         contiguous, then collapse the head dimension into the
+        #         channel dimension with view.
+        #         Apply out_proj then resid_dropout.
+        #         Output: [B, T, C]
 
         raise NotImplementedError
 
@@ -162,7 +167,8 @@ class ViTMLP(nn.Module):
         """
         Args/Returns: [B, T, hidden_dim]
 
-        TODO: fc1 → activation_fn → fc2 → dropout
+        TODO: Pass through fc1, apply the GELU activation, then fc2,
+              then dropout.
         """
         raise NotImplementedError
 
@@ -185,7 +191,8 @@ class ViTBlock(nn.Module):
             x = x + attn(ln1(x))
             x = x + mlp(ln2(x))
         """
-        # TODO: apply the two sub-layers.
+        # TODO: Apply attention with pre-norm and residual, then the MLP
+        #       with pre-norm and residual (pattern shown in the docstring).
         raise NotImplementedError
 
 
@@ -224,11 +231,11 @@ class ViT(nn.Module):
         Returns:
             [B, 1024, 768]
 
-        TODO 1: self.patch_embedding(x)  → [B, 1024, 768]
-        TODO 2: self.dropout
-        TODO 3: loop over self.blocks
-        TODO 4: self.layer_norm
-        TODO 5: return  (cls_flag=False → return all tokens)
+        TODO 1: Compute the patch embeddings.  → [B, 1024, 768]
+        TODO 2: Apply dropout.
+        TODO 3: Pass the sequence through each transformer block in order.
+        TODO 4: Apply the final layer normalization.
+        TODO 5: Return all patch tokens (cls_flag is False for this encoder).
         """
         raise NotImplementedError
 
