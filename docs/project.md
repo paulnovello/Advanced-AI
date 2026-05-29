@@ -117,7 +117,7 @@ Open `models/vision_transformer.py` and `models/language_model.py`. Each class h
 ### Step 2 — Verify weight loading
 
 Once all `__init__` methods pass their [fast tests](#section-6-test-suite), check that pretrained weights load cleanly.
-These [tests](#section-6-test-suite) download ~800 MB from HuggingFace and require a GPU or a patient CPU:
+These [tests](#section-6-test-suite) download ~800 MB from HugginFace so you have to run them in TURPAN login node:
 
 ```bash
 pytest tests/test_pretrained_loading.py -m slow
