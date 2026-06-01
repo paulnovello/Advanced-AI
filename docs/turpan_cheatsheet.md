@@ -39,6 +39,7 @@ First, create an env directory in `/tmpdir`:
 
 ```bash
 mkdir -p /tmpdir/YOUR_USERNAME/envs
+mkdir -p /tmpdir/YOUR_USERNAME/uv-cache
 ```
 
 Save the following command as an alias in your `~/.bashrc` to avoid having to write it every time. Add these lines (DO NOT FORGET TO REPLACE `YOUR_USERNAME`):
@@ -47,6 +48,7 @@ Save the following command as an alias in your `~/.bashrc` to avoid having to wr
 alias run_apptainer_login="apptainer shell \
 --env PATH=$HOME/.local/bin:$PATH \
 --env UV_PROJECT_ENVIRONMENT=/tmpdir/YOUR_USERNAME/envs/aai \
+--env UV_CACHE_DIR=/tmpdir/YOUR_USERNAME/uv-cache \
 --env HF_HOME=/work/formation/YOUR_USERNAME/huggingface \
 --bind /tmpdir,/work \
 --nv /work/conteneurs/sessions-interactives/pytorch-24.02-py3-calmip-si.sif"
