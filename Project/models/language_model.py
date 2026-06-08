@@ -301,7 +301,7 @@ class LMAttention(nn.Module):
             q,
             k_exp,
             v_exp,
-            attn_mask=attn_mask,
+            attn_mask=attn_mask if not is_causal else None,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
         )
