@@ -92,7 +92,7 @@ class VisionLanguageModel(nn.Module):
             self.decoder = LanguageModel(cfg.lm)
 
         self.MP = ModalityProjector(cfg)
-        self.tokenizer = get_tokenizer(cfg.lm.name)
+        self.tokenizer = get_tokenizer(cfg.lm.tokenizer)
         #raise NotImplementedError
 
     # ── PROVIDED — image token replacement ───────────────────────────────────
