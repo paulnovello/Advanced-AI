@@ -132,8 +132,9 @@ class RotaryEmbedding(nn.Module):
         B, T = position_ids.shape
 
         scale = 1
-        if self.max_position_embeddings < self.dim:
-            scale = T/self.max_position_embeddings
+        seq_len = position_ids.max().item() + 1
+        if self.max_position_embeddings < seq_len:
+            scale = seq_len/self.max_position_embeddings
 
         inv_freq = self.inv_freq / scale
 
@@ -314,16 +315,20 @@ class LMAttention(nn.Module):
         # TODO 6 — scaled dot-product attention
         is_causal = (T_curr == T_kv and T_curr > 1)
 
-        attn_output = F.scaled_dot_product_attention(
-            q,
-            k_exp,
-            v_exp,
-            attn_mask=attn_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal
-        )
-
-        # attn_output: [B, n_heads, T_curr, head_dim]
+        if self.sdpa:
+            attn_output = F.scaled_dot_product_attention(
+                q,
+                k_exp,
+                v_exp,
+                attn_mask=attn_mask,
+                dropout_p=self.dropout if self.training else 0.0,
+                is_causal=is_causal
+            )
+        else:
+            scores = q @ k_exp.transpose(-2, -1) / torch.sqrt(self.head_dim)
+            attn = F.softmax(scores, dim=-1)
+            attn = self.attn_dropout(attn)
+            attn_output = attn @ v_exp
 
         # TODO 7
         attn_output = attn_output.transpose(1, 2).contiguous()
