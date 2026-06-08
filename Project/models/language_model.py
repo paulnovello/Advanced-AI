@@ -265,7 +265,7 @@ class LMAttention(nn.Module):
         v = v.transpose(1, 2)  # [B, n_kv_heads, T_curr, head_dim]
 
         # --------- Step 2 
-        q, v = apply_rotary_pos_embd(q, v, cos, sin)
+        q, k = apply_rotary_pos_embd(q, k, cos, sin)
 
         # --------- Step 3
         # Initialize or update KV cache
@@ -285,14 +285,14 @@ class LMAttention(nn.Module):
 
         # ------- Step 4
         k_exp = torch.repeat_interleave(k, self.n_kv_groups, dim=1)
-        v_exp = torch.repeat_interleave(v, self.n_kv_groups, dim=2)
+        v_exp = torch.repeat_interleave(v, self.n_kv_groups, dim=1)
 
         # ------- Step 5
         attn_mask = None
         if attention_mask is not None:
-        # attention_mask: [B, T_kv] (1 = keep, 0 = pad)
-        attn_mask = (1.0 - attention_mask).to(dtype=q.dtype) * torch.finfo(q.dtype).min
-        attn_mask = attn_mask.view(q.size(0), 1, 1, -1)  # [B, 1, 1, T_kv]
+            # attention_mask: [B, T_kv] (1 = keep, 0 = pad)
+            attn_mask = (1.0 - attention_mask).to(dtype=q.dtype) * torch.finfo(q.dtype).min
+            attn_mask = attn_mask.view(q.size(0), 1, 1, -1)  # [B, 1, 1, T_kv]
 
         # -------- Step 6
         is_causal = (q.size(2) == k_exp.size(2)) and (q.size(2) > 1)
