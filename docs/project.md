@@ -216,7 +216,7 @@ After training has saved a checkpoint, run:
 ```bash
 python eval_mmstar.py \
     --checkpoint checkpoints/best_step5000 \
-    --dataset_local_path /path/to/shared/datasets/mmstar \
+    --dataset_local_path /work/shared/TPIRT/mmstar \
     --split val \
     --output_path eval_results/mmstar_best_step5000.json
 ```
