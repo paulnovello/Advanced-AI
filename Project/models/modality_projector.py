@@ -41,10 +41,10 @@ class ModalityProjector(nn.Module):
         super().__init__()
         self.pixel_shuffle_factor = cfg.projector.pixel_shuffle_factor  # 4
 
-        self.input_dim = cfg.vit.hidden_dim * self.pixel_shuffle_factor    # vit.hidden_dim × pixel_shuffle_factor²
+        self.input_dim = cfg.vit.hidden_dim * self.pixel_shuffle_factor**2    # vit.hidden_dim × pixel_shuffle_factor²
         #                         # (embedding size after merging neighbouring patches)
         self.output_dim = cfg.lm.hidden_dim
-        self.proj = nn.Linear(self.input_dim, self.output_dim)         # bias-free Linear: input_dim → output_dim
+        self.proj = nn.Linear(self.input_dim, self.output_dim, bias=False)         # bias-free Linear: input_dim → output_dim
 
         self.apply(self._init_weights)
 
