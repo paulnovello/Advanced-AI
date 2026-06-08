@@ -182,7 +182,7 @@ Then launch training:
 
 ```bash
 # Quick smoke test on Flickr
-uv run python train.py --dataset_type flickr \
+uv run python train.py --dataset_type flickr30k \
     --max_steps 100 --batch_size 1
 
 # Full training on The Cauldron
