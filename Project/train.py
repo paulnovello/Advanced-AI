@@ -262,9 +262,9 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
                 g["lr"] = get_lr(
                 global_step, max_lr, train_cfg.max_steps
                             )
-                optimizer.step()
-                optimizer.zero_grad()
-                global_step += 1
+            optimizer.step()
+            optimizer.zero_grad()
+            global_step += 1
         
         # TODO 6 — Store the unscaled loss for logging:
         batch_loss = (
