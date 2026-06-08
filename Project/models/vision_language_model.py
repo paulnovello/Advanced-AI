@@ -76,16 +76,16 @@ class VisionLanguageModel(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        # self.vision_encoder = ...   # the ViT image encoder
+        self.vision_encoder = ViT.from_pretrained(cfg.vit) if load_backbone else ViT(self.cfg)   # the ViT image encoder
         #   if load_backbone: use ViT.from_pretrained(cfg.vit)
         #   else:             use ViT(cfg.vit)
-        # self.decoder = ...          # the causal language model
+        self.decoder = LanguageModel.from_pretrained(cfg.lm) if load_backbone else LanguageModel(cfg.lm)          # the causal language model
         #   if load_backbone: use LanguageModel.from_pretrained(cfg.lm)
         #   else:             use LanguageModel(cfg.lm)
-        # self.MP = ...               # the ModalityProjector
-        # self.tokenizer = ...        # the tokenizer (use get_tokenizer)
+        self.MP = ModalityProjector(cfg)               # the ModalityProjector
+        self.tokenizer = get_tokenizer()        # the tokenizer (use get_tokenizer)
 
-        raise NotImplementedError
+        # raise NotImplementedError
 
     # ── PROVIDED — image token replacement ───────────────────────────────────
     def _replace_img_tokens_with_embd(self, input_ids, token_embd, image_embd):
