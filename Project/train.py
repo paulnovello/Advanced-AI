@@ -235,41 +235,47 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         # ══════════════════════════════════════════════════════════════════════
         # STUDENT SECTION — implement the training step
         #
-        # TODO 1 — Move tensors to device:
-        #     input_ids      = batch["input_ids"].to(device)
-        #     pixel_values   = batch["pixel_values"].to(device)
-        #     attention_mask = batch["attention_mask"].to(device)
-        #     labels         = batch["labels"].to(device)
+        # TODO 1 — Move all four batch tensors (input_ids, pixel_values,
+        #           attention_mask, labels) to the training device.
+        input_ids, pixel_values, attention_mask, labels = batch
+        input_ids = input_ids.to(device)
+        pixel_values = pixel_values.to(device)
+        attention_mask = attention_mask.to(device)
+        labels = labels.to(device)
+
         #
-        # TODO 2 — Forward pass (inside autocast_ctx for mixed precision):
-        #     with autocast_ctx:
-        #         _, loss = model(
-        #             input_ids, pixel_values, attention_mask, labels
-        #         )
+        # TODO 2 — Run the forward pass inside autocast_ctx for mixed-precision
+        #           training. The model returns (logits, loss); discard logits.
+        with autocast_ctx:
+            _, loss = model(input_ids, pixel_values, attention_mask=attention_mask, targets=labels)
+        # TODO 3 — Divide the loss by gradient_accumulation_steps before
+        #           backpropagating, so gradients accumulate correctly across
+        #           micro-steps.
+        loss /= train_cfg.gradient_accumulation_steps
+        # TODO 4 — Call backward on the scaled loss to accumulate gradients.
+        loss.backward()
+
+        # TODO 5 — On update steps only (is_update_step):
+        #           Clip gradients with torch.nn.utils.clip_grad_norm_ using
+        #           all_params and max_grad_norm. Update each param group's
+        #           "lr" by calling get_lr with global_step, the group's
+        #           corresponding entry from max_lrs, and max_steps. Then step
+        #           the optimizer, zero its gradients, and increment global_step.
+        if is_update_step:
+            torch.nn.utils.clip_grad_norm_(all_params, train_cfg.max_grad_norm)
+            for i in range(len(param_groups)):
+                lr = get_lr(global_step, max_lr=max_lrs[i], max_steps=train_cfg.max_steps)
+                optimizer.param_groups[i]["lr"] = lr
+            optimizer.step()
+            optimizer.zero_grad()
+            global_step += 1
+
+
         #
-        # TODO 3 — Scale loss for gradient accumulation:
-        #     loss = loss / train_cfg.gradient_accumulation_steps
-        #
-        # TODO 4 — Backward pass:
-        #     loss.backward()
-        #
-        # TODO 5 — Optimiser step (only on update steps):
-        #     if is_update_step:
-        #         torch.nn.utils.clip_grad_norm_(
-        #             all_params, train_cfg.max_grad_norm
-        #         )
-        #         for g, max_lr in zip(optimizer.param_groups, max_lrs):
-        #             g["lr"] = get_lr(
-        #                 global_step, max_lr, train_cfg.max_steps
-        #             )
-        #         optimizer.step()
-        #         optimizer.zero_grad()
-        #         global_step += 1
-        #
-        # TODO 6 — Store the unscaled loss for logging:
-        #     batch_loss = (
-        #         loss.item() * train_cfg.gradient_accumulation_steps
-        #     )
+        # TODO 6 — Record the unscaled loss in batch_loss for logging by
+        #           reversing the accumulation scaling on the detached scalar
+        #           (use .item() to detach from the graph).
+        batch_loss = loss.item() * train_cfg.gradient_accumulation_steps
         # ══════════════════════════════════════════════════════════════════════
 
         accum_step += 1
