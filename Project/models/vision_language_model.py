@@ -76,14 +76,14 @@ class VisionLanguageModel(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        self.vision_encoder = ViT.from_pretrained(cfg.vit) if load_backbone else ViT(self.cfg)   # the ViT image encoder
+        self.vision_encoder = ViT.from_pretrained(cfg.vit) if load_backbone else ViT(self.cfg.vit)   # the ViT image encoder
         #   if load_backbone: use ViT.from_pretrained(cfg.vit)
         #   else:             use ViT(cfg.vit)
         self.decoder = LanguageModel.from_pretrained(cfg.lm) if load_backbone else LanguageModel(cfg.lm)          # the causal language model
         #   if load_backbone: use LanguageModel.from_pretrained(cfg.lm)
         #   else:             use LanguageModel(cfg.lm)
         self.MP = ModalityProjector(cfg)               # the ModalityProjector
-        self.tokenizer = get_tokenizer()        # the tokenizer (use get_tokenizer)
+        self.tokenizer = get_tokenizer(cfg.lm.tokenizer)        # the tokenizer (use get_tokenizer)
 
         # raise NotImplementedError
 
@@ -154,7 +154,39 @@ class VisionLanguageModel(nn.Module):
 
         TODO 7 — If no targets: return (hidden, None) for generation.
         """
-        raise NotImplementedError
+        # TODO 1
+        token_embd = self.decoder.token_embedding(input_ids)
+
+        # TODO 2
+        pixel_values = self._process_images(pixel_values, input_ids.device)
+        image_features = self.vision_encoder(pixel_values)
+
+        # TODO 3
+        image_embd = self.MP(image_features)
+
+        # TODO 4
+        inputs_embd = self._replace_img_tokens_with_embd(input_ids, token_embd, image_embd)
+
+        # TODO 5
+        hidden, _ = self.decoder(inputs_embd, attention_mask=attention_mask)
+
+        if targets is not None:
+            # TODO 6
+            logits = self.decoder.head(hidden)
+
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1),
+                ignore_index=-100
+            )
+
+            return logits, loss
+        else:
+            # TODO 7
+            return hidden, None
+
+
+        # raise NotImplementedError
 
     # ── PROVIDED — autoregressive generation ─────────────────────────────────
     @torch.inference_mode()

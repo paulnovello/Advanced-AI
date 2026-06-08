@@ -545,7 +545,7 @@ class LanguageModel(nn.Module):
         # TODO 6
         return hidden, kv_cache
 
-        raise NotImplementedError
+        # raise NotImplementedError
 
     # ── Provided: greedy generation for the standalone LM ────────────────────
     @torch.inference_mode()
