@@ -237,7 +237,12 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         #
         # TODO 1 — Move all four batch tensors (input_ids, pixel_values,
         #           attention_mask, labels) to the training device.
-        input_ids, pixel_values, attention_mask, labels = batch
+        input_ids, pixel_values, attention_mask, labels = (
+            batch['input_ids'],
+            batch['pixel_values'],
+            batch['attention_mask'],
+            batch['labels'],
+        )
         input_ids = input_ids.to(device)
         pixel_values = pixel_values.to(device)
         attention_mask = attention_mask.to(device)
@@ -276,6 +281,8 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         #           reversing the accumulation scaling on the detached scalar
         #           (use .item() to detach from the graph).
         batch_loss = loss.item() * train_cfg.gradient_accumulation_steps
+        print(batch_loss)
+
         # ══════════════════════════════════════════════════════════════════════
 
         accum_step += 1
