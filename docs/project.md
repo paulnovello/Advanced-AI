@@ -182,7 +182,7 @@ Then launch training:
 
 ```bash
 # Quick smoke test on Flickr
-uv run python train.py --dataset_type flickr \
+uv run python train.py --dataset_type flickr30k \
     --max_steps 100 --batch_size 1
 
 # Full training on The Cauldron
@@ -216,7 +216,7 @@ After training has saved a checkpoint, run:
 ```bash
 python eval_mmstar.py \
     --checkpoint checkpoints/best_step5000 \
-    --dataset_local_path /path/to/shared/datasets/mmstar \
+    --dataset_local_path /work/shared/TPIRT/mmstar \
     --split val \
     --output_path eval_results/mmstar_best_step5000.json
 ```
