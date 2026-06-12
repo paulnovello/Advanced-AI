@@ -139,7 +139,7 @@ class ViTAttention(nn.Module):
         #       because the vision encoder attends to all patches in
         #       both directions.
         if self.sdpa: 
-            y = F.scaled_dot_product_attention(query,key,value)
+            y = F.scaled_dot_product_attention(query,key,value, is_causal=False)
         else : 
             y = torch.softmax(query @ key.transpose(2,3) / math.sqrt(self.head_dim),dim=-1)
             y = self.attn_dropout(y)@value

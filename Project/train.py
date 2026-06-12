@@ -281,7 +281,6 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         #           reversing the accumulation scaling on the detached scalar
         #           (use .item() to detach from the graph).
         batch_loss = loss.item() * train_cfg.gradient_accumulation_steps
-        print(batch_loss)
 
         # ══════════════════════════════════════════════════════════════════════
 
@@ -291,7 +290,7 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         if is_update_step and global_step % train_cfg.log_interval == 0:
             elapsed = time.time() - t0
             print(
-                f"step {global_step:5d} | loss {batch_loss:.4f}"
+                f"step {global_step:5d} | loss {batch_loss:.4e}"
                 f" | {elapsed:.1f}s"
             )
 
@@ -319,7 +318,7 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
                 sum(val_losses) / len(val_losses)
                 if val_losses else float("nan")
             )
-            print(f"step {global_step:5d} | val_loss {avg_val:.4f}")
+            print(f"step {global_step:5d} | val_loss {avg_val:.4e}")
 
             if avg_val < best_val_loss:
                 best_val_loss = avg_val
