@@ -275,7 +275,7 @@ class LMAttention(nn.Module):
         v = self.v_proj(x).view(B, T_curr, self.n_kv_heads, self.head_dim).transpose(1,2)
 
         # TODO 2 - Rotation Embedding
-        q_rot, k_rot = apply_rotary_pos_embd(
+        q, k = apply_rotary_pos_embd(
             q = q, 
             k = k, 
             cos = cos,
@@ -304,28 +304,39 @@ class LMAttention(nn.Module):
         T_kv = k_exp.size(2)
 
         # TODO 5 — additive attention mask
-        attn_mask = None
-
+        min_value = torch.finfo(q.dtype).min
         if attention_mask is not None:
-            min_value = torch.finfo(q.dtype).min
-            attn_mask = attention_mask.unsqueeze(1).unsqueeze(1)
-            attn_mask = attn_mask.to(dtype=q.dtype)
-            attn_mask = (1.0 - attn_mask) * min_value
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
+            attention_mask = attention_mask.to(dtype=q.dtype)
+            attention_mask = (1.0 - attention_mask) * min_value
 
         # TODO 6 — scaled dot-product attention
         is_causal = (T_curr == T_kv and T_curr > 1)
+
+        if is_causal:
+            # can't have is causal and an attention mask we manually create the mask
+            # Get a lower trianglular matrix of one of the correct size 
+            causal_mask = torch.ones(T_kv, T_kv, dtype=q.dtype, device=q.device).tril()
+            # Fill the mask with the lowest value of q's dtype 
+            causal_mask = (1.0 - causal_mask) *  min_value
+            causal_mask = causal_mask.unsqueeze(0).unsqueeze(0) # causal mask doesn't depend on element of batch or head
+            if attention_mask is not None:
+                attention_mask += causal_mask
+
 
         if self.sdpa:
             attn_output = F.scaled_dot_product_attention(
                 q,
                 k_exp,
                 v_exp,
-                attn_mask=attn_mask,
+                attn_mask=attention_mask,
                 dropout_p=self.dropout if self.training else 0.0,
-                is_causal=is_causal
+                is_causal=False
             )
         else:
             scores = q @ k_exp.transpose(-2, -1) / torch.sqrt(self.head_dim)
+            if attention_mask is not None:
+                scores += attention_mask
             attn = F.softmax(scores, dim=-1)
             attn = self.attn_dropout(attn)
             attn_output = attn @ v_exp
@@ -338,8 +349,6 @@ class LMAttention(nn.Module):
         output = self.resid_dropout(output)
 
         return output, block_kv_cache
-        
-        # raise NotImplementedError
 
 
 # ─────────────────────────────────────────────────────────────────────────────
