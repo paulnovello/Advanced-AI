@@ -327,7 +327,7 @@ class LMAttention(nn.Module):
                 attention_mask = causal_mask
 
 
-        if self.sdpa or True:
+        if self.sdpa:
             attn_output = F.scaled_dot_product_attention(
                 q,
                 k_exp,
@@ -339,7 +339,6 @@ class LMAttention(nn.Module):
         else:
             scores = q @ k_exp.transpose(-2, -1) / torch.sqrt(self.head_dim)
             if attention_mask is not None:
-                print("ok")
                 scores += attention_mask
             attn = F.softmax(scores, dim=-1)
             attn = self.attn_dropout(attn)
