@@ -98,6 +98,14 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
                 f"No cauldron subsets found under {base_path}/. "
                 "Run prepare_datasets.py first."
             )
+    
+        print(split)
+        # split the dataset in train/val according to train_cfg.val_proportion
+        for split in splits:
+            split_len = len(split)
+            val_len = int(split_len * train_cfg.val_proportion)
+            train_len = split_len - val_len
+            split.train_test_split(test_size=val_len, shuffle=True)
 
         ds = concatenate_datasets(splits)
         print(f"Concatenated {len(splits)} subsets → {len(ds)} samples")

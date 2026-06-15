@@ -235,6 +235,9 @@ class TrainConfig:
     # (capped at 64 batches inside the eval loop)
     val_size: int = 256
 
+    # Proportion of the dataset to use for validation
+    val_proportion: float = 0.2
+
     # Maximum sequence length in tokens; samples longer than this are
     # dropped by VQACollator to prevent OOM
     max_length: int = 2048
