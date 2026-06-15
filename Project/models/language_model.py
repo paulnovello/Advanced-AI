@@ -321,10 +321,13 @@ class LMAttention(nn.Module):
             causal_mask = (1.0 - causal_mask) *  min_value
             causal_mask = causal_mask.unsqueeze(0).unsqueeze(0) # causal mask doesn't depend on element of batch or head
             if attention_mask is not None:
-                attention_mask += causal_mask
+                attention_mask = attention_mask.expand(-1, -1, T_curr, -1)
+                attention_mask = attention_mask + causal_mask
+            else:
+                attention_mask = causal_mask
 
 
-        if self.sdpa:
+        if self.sdpa or True:
             attn_output = F.scaled_dot_product_attention(
                 q,
                 k_exp,
@@ -336,6 +339,7 @@ class LMAttention(nn.Module):
         else:
             scores = q @ k_exp.transpose(-2, -1) / torch.sqrt(self.head_dim)
             if attention_mask is not None:
+                print("ok")
                 scores += attention_mask
             attn = F.softmax(scores, dim=-1)
             attn = self.attn_dropout(attn)

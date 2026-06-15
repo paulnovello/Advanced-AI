@@ -22,6 +22,7 @@ import argparse
 import json
 import math
 import os
+import tempfile
 import time
 from dataclasses import fields
 
@@ -80,8 +81,11 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
             ds, tokenizer, image_processor, vlm_cfg
         )
     else:
+        import hashlib        
+
         # Load and concatenate all cauldron subsets
-        splits = []
+        train_splits = []
+        val_splits = []
         base_path = train_cfg.dataset_local_path
         for subset in train_cfg.dataset_subsets:
             subset_path = os.path.join(base_path, subset)
@@ -91,31 +95,32 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
             print(f"  Loading {subset}...")
             raw = load_from_disk(subset_path)
             ds = raw["train"] if "train" in raw else raw
-            splits.append(ds)
 
-        if not splits:
+            subset_hash = hashlib.md5(subset.encode()).hexdigest()[:8]
+            train_cache = f"/tmpdir/tpirtmntll/hf_cache/{subset_hash}_train.arrow"
+            test_cache  = f"/tmpdir/tpirtmntll/hf_cache/{subset_hash}_test.arrow"
+
+            n_val = int(len(ds) * train_cfg.val_proportion)
+            indices = list(range(len(ds)))
+            train_splits.append(ds.select(indices[n_val:],  indices_cache_file_name=train_cache))
+            val_splits.append(  ds.select(indices[:n_val],  indices_cache_file_name=test_cache))
+
+        if not train_splits:
             raise ValueError(
                 f"No cauldron subsets found under {base_path}/. "
                 "Run prepare_datasets.py first."
             )
-    
-        print(split)
-        # split the dataset in train/val according to train_cfg.val_proportion
-        for split in splits:
-            split_len = len(split)
-            val_len = int(split_len * train_cfg.val_proportion)
-            train_len = split_len - val_len
-            split.train_test_split(test_size=val_len, shuffle=True)
 
-        ds = concatenate_datasets(splits)
-        print(f"Concatenated {len(splits)} subsets → {len(ds)} samples")
+        train_ds = concatenate_datasets(train_splits)
+        val_ds = concatenate_datasets(val_splits)
+        print(f"Loaded {len(train_splits)} subsets → {len(train_ds)} train / {len(val_ds)} val samples")
 
         from data.dataset import CauldronDataset
         train_dataset = CauldronDataset(
-            ds, tokenizer, image_processor, vlm_cfg
+            train_ds, tokenizer, image_processor, vlm_cfg
         )
         val_dataset = CauldronDataset(
-            ds, tokenizer, image_processor, vlm_cfg
+            val_ds, tokenizer, image_processor, vlm_cfg
         )
 
     collator = VQACollator(tokenizer, max_length=train_cfg.max_length)
