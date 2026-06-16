@@ -39,7 +39,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from safetensors.torch import load_model, save_model
+from safetensors.torch import load_model, save_file
 
 from models.config import VLMConfig
 from models.vision_transformer import ViT  # noqa: F401
@@ -47,7 +47,16 @@ from models.language_model import LanguageModel  # noqa: F401
 from models.modality_projector import ModalityProjector  # noqa: F401
 from data.processors import get_tokenizer  # noqa: F401
 
+from safetensors.torch import save_file
+import os
 
+def save_model(model, path):
+    state_dict = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+    tmp = path + ".tmp"
+    save_file(state_dict, tmp)
+    os.replace(tmp, path)
+    
+    
 def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("inf")):
     """Nucleus (top-p) and top-k filtering for token sampling. PROVIDED."""
     if top_k > 0:

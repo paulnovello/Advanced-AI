@@ -103,23 +103,11 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         print(f"Concatenated {len(splits)} subsets → {len(ds)} samples")
 
         from data.dataset import CauldronDataset
-        split_ds = ds.train_test_split(
-            test_size=0.1,
-            seed=42,
-        )
-        
         train_dataset = CauldronDataset(
-            split_ds["train"],
-            tokenizer,
-            image_processor,
-            vlm_cfg,
+            ds, tokenizer, image_processor, vlm_cfg
         )
-        
         val_dataset = CauldronDataset(
-            split_ds["test"],
-            tokenizer,
-            image_processor,
-            vlm_cfg,
+            ds, tokenizer, image_processor, vlm_cfg
         )
 
     collator = VQACollator(tokenizer, max_length=train_cfg.max_length)
@@ -128,7 +116,7 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         train_dataset,
         batch_size=train_cfg.batch_size,
         collate_fn=collator,
-        num_workers=2,
+        num_workers=2,  
         pin_memory=True,
     )
     val_loader = DataLoader(
