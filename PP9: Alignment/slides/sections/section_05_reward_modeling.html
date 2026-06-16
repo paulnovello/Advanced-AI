@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reward Modeling — Preference Alignment</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 1 — TITLE
+  ══════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Reward Modeling</h2>
+    <p class="fragment" data-fragment-index="1">Turning pairwise human preferences into a learnable scalar signal.</p>
+      </section>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 2 — RM ARCHITECTURE (animated SVG figure)
+  ══════════════════════════════════════════════════════════ -->
+  <section>
+    <h3>Architecture: Prompt + Response → Scalar Reward</h3>
+
+    <!-- Animated RM architecture figure (SMIL) -->
+    <svg id="rm-arch-svg" viewBox="0 0 1140 310" width="100%" style="max-width:1100px; display:block; margin:.2em auto 0;">
+      <defs>
+        <marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L9,3 z" fill="var(--fg)"/>
+        </marker>
+        <marker id="ah-orange" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L9,3 z" fill="var(--c-reward)"/>
+        </marker>
+      </defs>
+
+      <!-- === TOKEN INPUT BLOCK === -->
+      <!-- Prompt label -->
+      <text x="30" y="95" class="lbl" font-size="13" font-weight="600" fill="var(--c-pref)">
+        <animate attributeName="opacity" from="0" to="1" begin="0.17s" dur="0.7s" fill="freeze"/>
+        prompt x
+      </text>
+      <!-- Token boxes for prompt -->
+      <g>
+        <rect x="22" y="105" width="44" height="28" rx="6" class="node"
+          style="stroke:var(--c-pref);">
+          <animate attributeName="opacity" from="0" to="1" begin="0.34s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="44" y="124" text-anchor="middle" class="lbl" font-size="11" font-family="monospace">
+          <animate attributeName="opacity" from="0" to="1" begin="0.34s" dur="0.56s" fill="freeze"/>
+          tok
+        </text>
+        <rect x="72" y="105" width="44" height="28" rx="6" class="node" style="stroke:var(--c-pref);">
+          <animate attributeName="opacity" from="0" to="1" begin="0.59s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="94" y="124" text-anchor="middle" class="lbl" font-size="11" font-family="monospace">
+          <animate attributeName="opacity" from="0" to="1" begin="0.59s" dur="0.56s" fill="freeze"/>
+          tok
+        </text>
+        <rect x="122" y="105" width="44" height="28" rx="6" class="node" style="stroke:var(--c-pref);">
+          <animate attributeName="opacity" from="0" to="1" begin="0.85s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="144" y="124" text-anchor="middle" class="lbl" font-size="11" font-family="monospace">
+          <animate attributeName="opacity" from="0" to="1" begin="0.85s" dur="0.56s" fill="freeze"/>
+          tok
+        </text>
+      </g>
+      <!-- Completion label -->
+      <text x="30" y="170" class="lbl" font-size="13" font-weight="600" fill="var(--c-reward)">
+        <animate attributeName="opacity" from="0" to="1" begin="1s" dur="0.7s" fill="freeze"/>
+        completion y
+      </text>
+      <!-- Token boxes for completion -->
+      <g>
+        <rect x="22" y="180" width="44" height="28" rx="6" class="node" style="stroke:var(--c-reward);">
+          <animate attributeName="opacity" from="0" to="1" begin="1.2s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="44" y="199" text-anchor="middle" class="lbl" font-size="11" font-family="monospace">
+          <animate attributeName="opacity" from="0" to="1" begin="1.2s" dur="0.56s" fill="freeze"/>
+          tok
+        </text>
+        <rect x="72" y="180" width="44" height="28" rx="6" class="node" style="stroke:var(--c-reward);">
+          <animate attributeName="opacity" from="0" to="1" begin="1.4s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="94" y="199" text-anchor="middle" class="lbl" font-size="11" font-family="monospace">
+          <animate attributeName="opacity" from="0" to="1" begin="1.4s" dur="0.56s" fill="freeze"/>
+          tok
+        </text>
+        <rect x="122" y="180" width="44" height="28" rx="6" class="node" style="stroke:var(--c-reward);">
+          <animate attributeName="opacity" from="0" to="1" begin="1.7s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="144" y="199" text-anchor="middle" class="lbl" font-size="11" font-family="monospace">
+          <animate attributeName="opacity" from="0" to="1" begin="1.7s" dur="0.56s" fill="freeze"/>
+          EOS
+        </text>
+      </g>
+
+      <!-- === Flowing connector from tokens to backbone === -->
+      <line x1="172" y1="155" x2="250" y2="155" stroke="var(--fg)" stroke-width="2"
+            stroke-dasharray="8 6" marker-end="url(#ah)">
+        <animate attributeName="stroke-dashoffset" from="0" to="-28" dur="1.3s" repeatCount="indefinite" begin="1.9s"/>
+        <animate attributeName="opacity" from="0" to="1" begin="1.9s" dur="0.42s" fill="freeze"/>
+      </line>
+      <text x="207" y="147" text-anchor="middle" class="lbl muted" font-size="11">
+        <animate attributeName="opacity" from="0" to="1" begin="1.9s" dur="0.42s" fill="freeze"/>
+        input_ids
+      </text>
+
+      <!-- === LM BACKBONE BOX === -->
+      <rect x="255" y="90" width="220" height="130" rx="14"
+            fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="2.5">
+        <animate attributeName="opacity" from="0" to="1" begin="2.2s" dur="0.7s" fill="freeze"/>
+        <animate attributeName="filter"
+                 values="drop-shadow(0 0 0 rgba(29,111,184,0)); drop-shadow(0 0 8px rgba(29,111,184,0.6)); drop-shadow(0 0 2px rgba(29,111,184,0.3))"
+                 begin="3.1s" dur="1.7s" fill="freeze"/>
+      </rect>
+      <text x="365" y="148" text-anchor="middle" class="lbl" font-size="16" font-weight="700" fill="var(--c-policy)">
+        <animate attributeName="opacity" from="0" to="1" begin="2.2s" dur="0.7s" fill="freeze"/>
+        LM Backbone
+      </text>
+      <text x="365" y="168" text-anchor="middle" class="lbl muted" font-size="12">
+        <animate attributeName="opacity" from="0" to="1" begin="2.2s" dur="0.7s" fill="freeze"/>
+        (Transformer, init from SFT)
+      </text>
+      <text x="365" y="188" text-anchor="middle" class="lbl muted" font-size="12">
+        <animate attributeName="opacity" from="0" to="1" begin="2.2s" dur="0.7s" fill="freeze"/>
+        hidden_states[-1]
+      </text>
+
+      <!-- === Arrow: backbone → EOS extraction === -->
+      <line x1="480" y1="155" x2="558" y2="155" stroke="var(--c-policy)" stroke-width="2"
+            marker-end="url(#ah)">
+        <animate attributeName="opacity" from="0" to="1" begin="3.7s" dur="0.56s" fill="freeze"/>
+      </line>
+      <text x="519" y="146" text-anchor="middle" class="lbl" font-size="11" fill="var(--c-policy)">
+        <animate attributeName="opacity" from="0" to="1" begin="3.7s" dur="0.56s" fill="freeze"/>
+        h[EOS]
+      </text>
+      <text x="519" y="170" text-anchor="middle" class="lbl muted" font-size="11">
+        <animate attributeName="opacity" from="0" to="1" begin="3.7s" dur="0.56s" fill="freeze"/>
+        (last non-pad)
+      </text>
+
+      <!-- === LINEAR HEAD BOX === -->
+      <rect x="562" y="110" width="190" height="90" rx="12"
+            fill="var(--bg-2)" stroke="var(--c-reward)" stroke-width="2.5">
+        <animate attributeName="opacity" from="0" to="1" begin="4.2s" dur="0.7s" fill="freeze"/>
+      </rect>
+      <text x="657" y="150" text-anchor="middle" class="lbl" font-size="15" font-weight="700" fill="var(--c-reward)">
+        <animate attributeName="opacity" from="0" to="1" begin="4.2s" dur="0.7s" fill="freeze"/>
+        Linear(H → 1)
+      </text>
+      <text x="657" y="170" text-anchor="middle" class="lbl muted" font-size="12">
+        <animate attributeName="opacity" from="0" to="1" begin="4.2s" dur="0.7s" fill="freeze"/>
+        scalar head
+      </text>
+      <text x="657" y="188" text-anchor="middle" class="lbl muted" font-size="11">
+        <animate attributeName="opacity" from="0" to="1" begin="4.2s" dur="0.7s" fill="freeze"/>
+        (learned weights)
+      </text>
+
+      <!-- === Arrow: head → output === -->
+      <line x1="755" y1="155" x2="828" y2="155" stroke="var(--c-reward)" stroke-width="2.5"
+            marker-end="url(#ah-orange)">
+        <animate attributeName="opacity" from="0" to="1" begin="5.1s" dur="0.56s" fill="freeze"/>
+      </line>
+
+      <!-- === SCALAR REWARD OUTPUT === -->
+      <rect x="832" y="118" width="130" height="74" rx="14"
+            fill="rgba(181,115,15,0.18)" stroke="var(--c-reward)" stroke-width="3">
+        <animate attributeName="opacity" from="0" to="1" begin="5.3s" dur="0.56s" fill="freeze"/>
+        <animate attributeName="stroke-width" values="3;5;3" begin="6s" dur="1.7s" repeatCount="indefinite"/>
+      </rect>
+      <text x="897" y="148" text-anchor="middle" class="lbl" font-size="18" font-weight="800" fill="var(--c-reward)">
+        <animate attributeName="opacity" from="0" to="1" begin="5.3s" dur="0.56s" fill="freeze"/>
+        r(x, y)
+      </text>
+      <text x="897" y="170" text-anchor="middle" class="lbl muted" font-size="13">
+        <animate attributeName="opacity" from="0" to="1" begin="5.3s" dur="0.56s" fill="freeze"/>
+        scalar ∈ ℝ
+      </text>
+
+      <!-- === BT training loop arrows (chosen / rejected) === -->
+      <text x="897" y="248" text-anchor="middle" class="lbl" font-size="12" fill="var(--c-pref)">
+        <animate attributeName="opacity" from="0" to="1" begin="6s" dur="0.7s" fill="freeze"/>
+        r(x,y_w) − r(x,y_l) → BT loss
+      </text>
+      <line x1="897" y1="194" x2="897" y2="238" stroke="var(--c-pref)" stroke-width="1.5"
+            stroke-dasharray="4 3" marker-end="url(#ah)">
+        <animate attributeName="opacity" from="0" to="1" begin="6s" dur="0.7s" fill="freeze"/>
+      </line>
+
+      <!-- === Brace / caption: "1 forward pass per completion" === -->
+      <text x="365" y="260" text-anchor="middle" class="lbl muted" font-size="12">
+        <animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.7s" fill="freeze"/>
+        One forward pass per completion → scalar score → contrastive loss
+      </text>
+    </svg>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8em;margin-top:.4em;">
+      <div class="fragment callout policy" data-fragment-index="1">
+        <strong>Backbone:</strong> causal Transformer initialized from the SFT model — not random.
+      </div>
+      <div class="fragment callout reward" data-fragment-index="2">
+        <strong>Scalar head:</strong> <code>Linear(hidden_size, 1)</code> — extracts reward from the EOS (last non-padding) hidden state.
+      </div>
+      <div class="fragment callout pref" data-fragment-index="3">
+        <strong>Training:</strong> score both $\htmlClass{k-pref}{y_w}$ and $\htmlClass{k-pref}{y_l}$; apply BT loss. <strong>1 epoch</strong> to avoid overfitting.
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 3 — BRADLEY-TERRY DERIVATION CHAIN
+  ══════════════════════════════════════════════════════════ -->
+  <section>
+    <h3>Bradley-Terry: Deriving the Preference Probability</h3>
+
+    <div class="deriv" style="font-size:.74em;">
+
+      <!-- Line 1: Original BT formulation with latent strengths -->
+      <div class="line fragment" data-fragment-index="1">
+        <div class="eq">\[
+          P\!\left(\htmlClass{k-pref}{i \succ j}\right)
+          = \frac{\htmlClass{k-reward}{p_i}}{\htmlClass{k-reward}{p_i}+\htmlClass{k-reward}{p_j}}
+        \]</div>
+        <div class="why">Bradley-Terry (1952): each item has a latent <span class="hl-reward">strength</span> $p_i > 0$.</div>
+      </div>
+
+      <!-- Line 2: Reparametrize with exponential scores -->
+      <div class="line fragment" data-fragment-index="2">
+        <div class="eq">\[
+          \htmlClass{k-reward}{p_i} = e^{\htmlClass{k-reward}{r_i}}
+          \;\Rightarrow\;
+          P\!\left(\htmlClass{k-pref}{i \succ j}\right)
+          = \frac{e^{\htmlClass{k-reward}{r_i}}}{e^{\htmlClass{k-reward}{r_i}}+e^{\htmlClass{k-reward}{r_j}}}
+        \]</div>
+        <div class="why">Reparametrize with unbounded log-strength $r_i \in \mathbb{R}$. Only score differences matter.</div>
+      </div>
+
+      <!-- Line 3: Factor and simplify to sigmoid -->
+      <div class="line fragment" data-fragment-index="3">
+        <div class="eq">\[
+          = \frac{1}{1 + e^{-(\htmlClass{k-reward}{r_i}-\htmlClass{k-reward}{r_j})}}
+          = \htmlClass{k-logp}{\sigma}\!\left(\htmlClass{k-reward}{r_i} - \htmlClass{k-reward}{r_j}\right)
+        \]</div>
+        <div class="why">Divide numerator and denominator by $e^{r_i}$; recognize the <span class="hl-logp">sigmoid</span> $\sigma(z)=1/(1+e^{-z})$.</div>
+      </div>
+
+      <!-- Line 4: Substitute RM notation -->
+      <div class="line fragment" data-fragment-index="4">
+        <div class="eq">\[
+          P\!\left(\htmlClass{k-pref}{y_w \succ y_l} \mid x\right)
+          = \htmlClass{k-logp}{\sigma}\!\left(\htmlClass{k-reward}{r_\theta(x, y_w)} - \htmlClass{k-reward}{r_\theta(x, y_l)}\right)
+        \]</div>
+        <div class="why">Substitute: $r_i \to \htmlClass{k-reward}{r_\theta(x,y_w)}$, $r_j \to \htmlClass{k-reward}{r_\theta(x,y_l)}$. Now the RM is a parametric model of preferences.</div>
+      </div>
+
+      <!-- Line 5: Final boxed result -->
+      <div class="line fragment" data-fragment-index="5">
+        <div class="eq">
+          <div class="eqresult">\[
+            P\!\left(\htmlClass{k-pref}{y_w \succ y_l} \mid x\right)
+            = \htmlClass{k-logp}{\sigma}\!\Bigl(\htmlClass{k-reward}{r_\theta(x,\htmlClass{k-pref}{y_w})} - \htmlClass{k-reward}{r_\theta(x,\htmlClass{k-pref}{y_l})}\Bigr)
+          \]</div>
+        </div>
+        <div class="why">Adding a constant $c$ to every score leaves <em>all</em> probabilities unchanged — scores are defined up to a shift. The sigmoid only sees the <em>difference</em> $\Delta r$.</div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 4 — RM LOSS DERIVATION CHAIN
+  ══════════════════════════════════════════════════════════ -->
+  <section>
+    <h3>From Preference Probability to the Training Loss</h3>
+
+    <div class="deriv" style="font-size:.82em;">
+
+      <!-- Line 1: start from the preference probability (sigmoid form, prev slide) -->
+      <div class="line fragment" data-fragment-index="1">
+        <div class="eq">\[
+          \theta^* = \arg\max_\theta\;
+          P\!\left(\htmlClass{k-pref}{y_w \succ y_l} \mid x\right)
+          = \arg\max_\theta\;
+          \htmlClass{k-logp}{\sigma}\!\left(\htmlClass{k-reward}{r_\theta(x,y_w)} - \htmlClass{k-reward}{r_\theta(x,y_l)}\right)
+        \]</div>
+        <div class="why">Start from the preference probability derived on the previous slide; maximize the likelihood of the observed preference.</div>
+      </div>
+
+      <!-- Line 2: convert max to min via -log -->
+      <div class="line fragment" data-fragment-index="2">
+        <div class="eq">\[
+          = \arg\min_\theta\;
+          \htmlClass{k-logp}{-\log\,\sigma}\!\left(\htmlClass{k-reward}{r_\theta(x,y_w)} - \htmlClass{k-reward}{r_\theta(x,y_l)}\right)
+        \]</div>
+        <div class="why">$\arg\max f = \arg\min (-\log f)$; log is monotone, so the optimum is unchanged. This is the NLL.</div>
+      </div>
+
+      <!-- Line 3: full dataset expectation — the RM loss -->
+      <div class="line fragment" data-fragment-index="3">
+        <div class="eq">
+          <div class="eqresult">\[
+            \mathcal{L}(\theta)
+            = \htmlClass{k-logp}{-\,\mathbb{E}_{(x,y_w,y_l)\sim\mathcal{D}}}
+              \Bigl[\log\,\htmlClass{k-logp}{\sigma}\!\left(
+                \htmlClass{k-reward}{r_\theta(x,y_w)} - \htmlClass{k-reward}{r_\theta(x,y_l)}
+              \right)\Bigr]
+          \]</div>
+        </div>
+        <div class="why">Average NLL over the preference dataset $\mathcal{D}$. This is the Bradley-Terry RM loss.</div>
+      </div>
+
+    </div>
+
+    <div class="fragment callout" data-fragment-index="4" style="font-size:.56em;margin-top:.15em;">
+      In code (numerically stable): <code>-F.logsigmoid(r_chosen - r_rejected).mean()</code>.
+    </div>
+
+    <div class="fragment callout adv" data-fragment-index="5" style="font-size:.56em;margin:.15em 0;">
+      <strong>Variants exist</strong> — margin term $m(y_w,y_l)$ (Llama 2), K-wise Plackett–Luce ranking (Starling) — but plain Bradley–Terry remains the default.
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 5 — ORM vs PRM ANIMATED FIGURE
+  ══════════════════════════════════════════════════════════ -->
+  <section>
+    <h3>Reward Model Variants: ORM vs PRM</h3>
+    <p style="font-size:.82em;color:var(--muted);margin:.1em 0 .5em;">
+      The BT model scores the <em>whole sequence once</em>.
+      Two variants add finer-grained supervision for reasoning tasks.
+    </p>
+
+    <!-- ORM vs PRM animated SVG figure (fragment-driven via JS) -->
+    <svg id="ormprmsvg" viewBox="0 0 1100 320" width="100%" style="max-width:1060px;display:block;margin:0 auto;">
+      <defs>
+        <marker id="ah2" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="var(--fg)"/>
+        </marker>
+      </defs>
+
+      <!-- ── LEFT COLUMN: ORM label ── -->
+      <text x="210" y="30" text-anchor="middle" class="lbl" font-size="16" font-weight="700" fill="var(--c-reward)">ORM — Outcome Reward Model</text>
+      <text x="210" y="50" text-anchor="middle" class="lbl muted" font-size="12">One scalar at the end of the full completion</text>
+
+      <!-- ── RIGHT COLUMN: PRM label ── -->
+      <text x="820" y="30" text-anchor="middle" class="lbl" font-size="16" font-weight="700" fill="var(--c-adv)">PRM — Process Reward Model</text>
+      <text x="820" y="50" text-anchor="middle" class="lbl muted" font-size="12">A reward badge at each reasoning step boundary</text>
+
+      <!-- Divider -->
+      <line x1="535" y1="60" x2="535" y2="310" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+      <!-- ────────── ORM SIDE ────────── -->
+      <!-- Step boxes -->
+      <g id="orm-steps">
+        <!-- Step 1 -->
+        <rect x="30" y="80" width="120" height="50" rx="10" class="node"/>
+        <text x="90" y="100" text-anchor="middle" class="lbl" font-size="12">Step 1</text>
+        <text x="90" y="116" text-anchor="middle" class="lbl muted" font-size="11">Expand 2(x+3)</text>
+
+        <!-- Step 2 -->
+        <rect x="30" y="155" width="120" height="50" rx="10" class="node"/>
+        <text x="90" y="175" text-anchor="middle" class="lbl" font-size="12">Step 2</text>
+        <text x="90" y="191" text-anchor="middle" class="lbl muted" font-size="11">= 2x + 6</text>
+
+        <!-- Step 3 -->
+        <rect x="30" y="230" width="120" height="50" rx="10" class="node"/>
+        <text x="90" y="250" text-anchor="middle" class="lbl" font-size="12">Step 3</text>
+        <text x="90" y="266" text-anchor="middle" class="lbl muted" font-size="11">Answer: x = −3</text>
+
+        <!-- Vertical arrows -->
+        <line x1="90" y1="132" x2="90" y2="153" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah2)"/>
+        <line x1="90" y1="207" x2="90" y2="228" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+        <!-- Masked labels on steps 1 and 2 -->
+        <text x="160" y="110" class="lbl muted" font-size="13" id="orm-mask1">— masked —</text>
+        <text x="160" y="185" class="lbl muted" font-size="13" id="orm-mask2">— masked —</text>
+
+        <!-- ORM reward badge at the end (Step 3) — animates in -->
+        <g id="orm-badge" opacity="0">
+          <rect x="160" y="230" width="100" height="50" rx="10"
+                fill="rgba(181,115,15,0.22)" stroke="var(--c-reward)" stroke-width="2.5"/>
+          <text x="210" y="250" text-anchor="middle" class="lbl" font-size="13" fill="var(--c-reward)" font-weight="700">r = 0.87</text>
+          <text x="210" y="268" text-anchor="middle" class="lbl muted" font-size="11">✓ correct</text>
+          <animate xlink:href="#orm-badge" attributeName="opacity" from="0" to="1" begin="orm-badge.click; indefinite" dur="0.7s" fill="freeze"/>
+        </g>
+
+        <!-- Horizontal arrow to ORM badge -->
+        <line x1="152" y1="255" x2="158" y2="255" stroke="var(--c-reward)" stroke-width="2"
+              marker-end="url(#ah2)" id="orm-arrow" opacity="0"/>
+
+        <!-- Label: "1 reward total" -->
+        <text x="210" y="300" text-anchor="middle" class="lbl" font-size="13" fill="var(--c-reward)" id="orm-total-lbl" opacity="0">1 reward total (sequence level)</text>
+      </g>
+
+      <!-- ────────── PRM SIDE ────────── -->
+      <g id="prm-steps">
+        <!-- Step 1 -->
+        <rect x="555" y="80" width="120" height="50" rx="10" class="node"/>
+        <text x="615" y="100" text-anchor="middle" class="lbl" font-size="12">Step 1</text>
+        <text x="615" y="116" text-anchor="middle" class="lbl muted" font-size="11">Expand 2(x+3)</text>
+
+        <!-- Step 2 -->
+        <rect x="555" y="155" width="120" height="50" rx="10" class="node"/>
+        <text x="615" y="175" text-anchor="middle" class="lbl" font-size="12">Step 2</text>
+        <text x="615" y="191" text-anchor="middle" class="lbl muted" font-size="11">= 2x + 6</text>
+
+        <!-- Step 3 -->
+        <rect x="555" y="230" width="120" height="50" rx="10" class="node"/>
+        <text x="615" y="250" text-anchor="middle" class="lbl" font-size="12">Step 3</text>
+        <text x="615" y="266" text-anchor="middle" class="lbl muted" font-size="11">Answer: x = −3</text>
+
+        <!-- Vertical arrows -->
+        <line x1="615" y1="132" x2="615" y2="153" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah2)"/>
+        <line x1="615" y1="207" x2="615" y2="228" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+        <!-- PRM reward badges — light up one per step -->
+        <!-- Badge 1 -->
+        <g id="prm-badge1" opacity="0">
+          <rect x="685" y="80" width="90" height="50" rx="10"
+                fill="rgba(46,125,70,0.18)" stroke="var(--c-adv)" stroke-width="2"/>
+          <text x="730" y="100" text-anchor="middle" class="lbl" font-size="13" fill="var(--c-adv)" font-weight="700">+1</text>
+          <text x="730" y="118" text-anchor="middle" class="lbl muted" font-size="11">correct</text>
+        </g>
+        <!-- Badge 2 -->
+        <g id="prm-badge2" opacity="0">
+          <rect x="685" y="155" width="90" height="50" rx="10"
+                fill="rgba(46,125,70,0.18)" stroke="var(--c-adv)" stroke-width="2"/>
+          <text x="730" y="175" text-anchor="middle" class="lbl" font-size="13" fill="var(--c-adv)" font-weight="700">+1</text>
+          <text x="730" y="193" text-anchor="middle" class="lbl muted" font-size="11">correct</text>
+        </g>
+        <!-- Badge 3 -->
+        <g id="prm-badge3" opacity="0">
+          <rect x="685" y="230" width="90" height="50" rx="10"
+                fill="rgba(46,125,70,0.18)" stroke="var(--c-adv)" stroke-width="2"/>
+          <text x="730" y="250" text-anchor="middle" class="lbl" font-size="13" fill="var(--c-adv)" font-weight="700">+1</text>
+          <text x="730" y="268" text-anchor="middle" class="lbl muted" font-size="11">correct</text>
+        </g>
+
+        <!-- Arrows from steps to badges -->
+        <line x1="677" y1="105" x2="683" y2="105" stroke="var(--c-adv)" stroke-width="2"
+              marker-end="url(#ah2)" id="prm-arr1" opacity="0"/>
+        <line x1="677" y1="180" x2="683" y2="180" stroke="var(--c-adv)" stroke-width="2"
+              marker-end="url(#ah2)" id="prm-arr2" opacity="0"/>
+        <line x1="677" y1="255" x2="683" y2="255" stroke="var(--c-adv)" stroke-width="2"
+              marker-end="url(#ah2)" id="prm-arr3" opacity="0"/>
+
+        <!-- Label: "K rewards" -->
+        <text x="810" y="300" text-anchor="middle" class="lbl" font-size="13" fill="var(--c-adv)" id="prm-total-lbl" opacity="0">K rewards (one per step boundary)</text>
+      </g>
+    </svg>
+
+    <!-- Callouts driven by fragments → JS below animates the SVG badges -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1em;margin-top:.3em;">
+      <div class="fragment callout reward" data-fragment-index="1" id="orm-callout">
+        <strong>ORM:</strong> single binary label $r \in \{0,1\}$ on the entire completion.
+        Per-token BCE loss. Good for verifiable domains (math, code).
+        Does <em>not</em> catch reasoning errors mid-sequence.
+      </div>
+      <div class="fragment callout adv" data-fragment-index="2" id="prm-callout">
+        <strong>PRM:</strong> label $y_{s_i} \in \{-1,0,+1\}$ at each step boundary (e.g., newline token).
+        Per-step CE loss. Enables pruning incorrect reasoning branches during search.
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 7 — GENERATIVE REWARD MODELING / LLM-AS-A-JUDGE
+  ══════════════════════════════════════════════════════════ -->
+  <section>
+    <h3>Generative Reward Modeling &amp; LLM-as-a-Judge</h3>
+
+    <!-- Simple pipe diagram -->
+    <div class="fragment pipe" data-fragment-index="1" style="margin:.5em 0;">
+      <div class="box" style="border-color:var(--c-pref);font-size:.82em;">prompt $x$ + $(y_A, y_B)$</div>
+      <div class="arrow">→</div>
+      <div class="box" style="border-color:var(--c-policy);font-size:.82em;">LLM Judge</div>
+      <div class="arrow">→</div>
+      <div class="box" style="border-color:var(--c-logp);font-size:.82em;"><code>[[A]] / [[B]] / [[C]]</code></div>
+    </div>
+
+    <div class="fragment" data-fragment-index="2"
+         style="background:var(--bg-2);border-left:4px solid var(--c-policy);
+                padding:.7em 1em;font-size:.72em;text-align:left;border-radius:0 8px 8px 0;margin:.4em 0;">
+      <strong style="color:var(--c-policy);">System prompt (MT-Bench, Zheng et al. 2023):</strong><br>
+      <em>"Please act as an impartial judge… output [[A]] if assistant A is better,
+      [[B]] if B is better, [[C]] for a tie."</em>
+    </div>
+
+    <ul style="font-size:.82em;">
+      <li class="fragment" data-fragment-index="3">
+        Spawned automated evaluation benchmarks: <span class="hl">AlpacaEval</span>,
+        <span class="hl">Arena-Hard</span>, <span class="hl">WildBench</span>.
+      </li>
+      <li class="fragment" data-fragment-index="4">
+        Models trained <em>specifically</em> to be judges ("Generative RMs") are an active research area —
+        but still lag dedicated scalar RMs on RM benchmarks (RewardBench, RMB, RewardBench2).
+      </li>
+      <li class="fragment" data-fragment-index="5">
+        Practical tip: use <strong>temperature = 0</strong> to reduce rating variance.
+      </li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 8 — PROXY DIVERGENCE TEASER (animated SVG)
+  ══════════════════════════════════════════════════════════ -->
+  <section>
+    <h3>The RM is a <span class="hl-reward">Proxy</span> — It Can Diverge</h3>
+    <p class="fragment" data-fragment-index="1" style="font-size:.85em;">
+      The reward model approximates human preference — it is not human preference itself.
+      Policy optimization <span class="hl-reward">exploits gaps</span> in the learned surface.
+    </p>
+
+    <div style="display:flex;gap:2em;align-items:flex-start;margin-top:.4em;">
+
+      <!-- Animated divergence curve -->
+      <svg viewBox="0 0 440 270" width="440" height="270" style="flex-shrink:0;">
+        <defs>
+          <!-- True reward path: gently rising -->
+          <path id="true-path" d="M30,220 C80,190 140,155 200,130 C260,110 320,100 410,92"/>
+          <!-- RM reward path: rises then diverges downward -->
+          <path id="rm-path"   d="M30,220 C80,180 130,140 185,105 C220,84 255,82 290,95 C330,112 370,140 410,175"/>
+        </defs>
+
+        <!-- Axes -->
+        <line x1="25" y1="10" x2="25" y2="235" stroke="var(--muted)" stroke-width="1.5"/>
+        <line x1="25" y1="235" x2="430" y2="235" stroke="var(--muted)" stroke-width="1.5"/>
+        <text x="10" y="130" fill="var(--muted)" font-size="11" transform="rotate(-90,10,130)">Reward</text>
+        <text x="220" y="258" text-anchor="middle" fill="var(--muted)" font-size="11">Optimization steps →</text>
+        <!-- Tick marks on x axis -->
+        <line x1="115" y1="232" x2="115" y2="238" stroke="var(--muted)" stroke-width="1"/>
+        <line x1="220" y1="232" x2="220" y2="238" stroke="var(--muted)" stroke-width="1"/>
+        <line x1="325" y1="232" x2="325" y2="238" stroke="var(--muted)" stroke-width="1"/>
+
+        <!-- True reward curve — draws in via SMIL -->
+        <use xlink:href="#true-path" fill="none" stroke="var(--c-adv)" stroke-width="2.5"
+             stroke-dasharray="6 3"/>
+        <!-- (static dashed green — always visible) -->
+
+        <!-- RM reward curve — draws in with animation -->
+        <path d="M30,220 C80,180 130,140 185,105 C220,84 255,82 290,95 C330,112 370,140 410,175"
+              fill="none" stroke="var(--c-reward)" stroke-width="2.8"
+              stroke-dasharray="650" stroke-dashoffset="650"
+              class="svg-draw" style="--len:650;">
+          <animate attributeName="stroke-dashoffset" from="650" to="0"
+                   begin="0.85s" dur="3.1s" fill="freeze"/>
+        </path>
+
+        <!-- Optimal point marker -->
+        <line x1="253" y1="20" x2="253" y2="230" stroke="var(--c-pref)" stroke-width="1.2"
+              stroke-dasharray="4 3" opacity="0">
+          <animate attributeName="opacity" from="0" to="1" begin="4.6s" dur="0.7s" fill="freeze"/>
+        </line>
+        <text x="258" y="38" fill="var(--c-pref)" font-size="10.5" opacity="0">
+          <animate attributeName="opacity" from="0" to="1" begin="4.6s" dur="0.7s" fill="freeze"/>
+          RM peaks
+        </text>
+        <text x="258" y="52" fill="var(--muted)" font-size="10" opacity="0">
+          <animate attributeName="opacity" from="0" to="1" begin="4.6s" dur="0.7s" fill="freeze"/>
+          → diverges
+        </text>
+
+        <!-- Legend -->
+        <rect x="30" y="20" width="12" height="3" fill="var(--c-adv)" rx="2"/>
+        <text x="47" y="27" fill="var(--c-adv)" font-size="11">True reward</text>
+        <rect x="30" y="34" width="12" height="3" fill="var(--c-reward)" rx="2"/>
+        <text x="47" y="41" fill="var(--c-reward)" font-size="11">RM proxy score</text>
+      </svg>
+
+      <!-- Explanation cards -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:.7em;">
+        <div class="card fragment" data-fragment-index="2" style="font-size:.78em;padding:.7em .9em;">
+          <strong style="color:var(--c-reward);">Reward hacking:</strong>
+          the policy finds completions that score high on the RM but that humans would
+          not actually prefer — the RM's preference surface has gaps and artefacts.
+        </div>
+        <div class="card fragment" data-fragment-index="3" style="font-size:.78em;padding:.7em .9em;">
+          <strong style="color:var(--c-reward);">Over-optimization:</strong>
+          the longer you train against the RM proxy, the worse it gets. The RM score
+          peaks and then collapses relative to true human preference.
+        </div>
+        <div class="card fragment" data-fragment-index="4" style="font-size:.78em;padding:.7em .9em;border-color:var(--c-kl);">
+          <strong style="color:var(--c-kl);">Mitigation — KL regularization:</strong>
+          add $\htmlClass{k-kl}{\beta \cdot D_{\mathrm{KL}}(\pi_\theta \| \pi_{\mathrm{ref}})}$
+          to the objective. Stops the policy from wandering too far into RM blind spots.
+          <em style="color:var(--muted);">→ Next section: PPO/GRPO and the full RL objective.</em>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/math/math.min.js"></script>
+<script>
+Reveal.initialize({
+  hash:true, slideNumber:'c/t', transition:'slide', backgroundTransition:'fade',
+  width:1280, height:720, margin:0.04,
+  katex:{ delimiters:[
+     {left:'\\[',right:'\\]',display:true},
+     {left:'$',right:'$',display:false}],
+     trust:true, strict:false },
+  plugins:[ RevealMath.KaTeX ]
+});
+
+/* --- Replay auto-running SMIL when a slide is (re)entered --- */
+function restartSVGs(slide){
+  if(!slide) return;
+  slide.querySelectorAll('svg').forEach(function(s){
+    if(s.querySelector('animate,animateTransform,animateMotion')){
+      try { s.setCurrentTime(0); } catch(e) {}
+    }
+  });
+}
+Reveal.on('ready', function(e){ restartSVGs(e.currentSlide); });
+Reveal.on('slidechanged', function(e){ restartSVGs(e.currentSlide); });
+
+/* ── Section-scoped ORM vs PRM figure animation ──
+   Listens for fragments on slide index 4 (0-based: index 4 = 5th slide = ORM/PRM slide).
+   Guards with element-existence checks.                                         */
+(function() {
+  function showEl(id)  { var el = document.getElementById(id); if (el) el.setAttribute('opacity','1'); }
+  function hideEl(id)  { var el = document.getElementById(id); if (el) el.setAttribute('opacity','0'); }
+
+  function applyORM() {
+    showEl('orm-badge');  showEl('orm-arrow');  showEl('orm-total-lbl');
+  }
+  function applyPRM() {
+    showEl('prm-badge1'); showEl('prm-badge2'); showEl('prm-badge3');
+    showEl('prm-arr1');   showEl('prm-arr2');   showEl('prm-arr3');
+    showEl('prm-total-lbl');
+  }
+  function resetORM() {
+    hideEl('orm-badge');  hideEl('orm-arrow');  hideEl('orm-total-lbl');
+  }
+  function resetPRM() {
+    hideEl('prm-badge1'); hideEl('prm-badge2'); hideEl('prm-badge3');
+    hideEl('prm-arr1');   hideEl('prm-arr2');   hideEl('prm-arr3');
+    hideEl('prm-total-lbl');
+  }
+
+  /* Slide 5 (0-indexed = 4) is the ORM/PRM slide */
+  var ORM_PRM_SLIDE_H = 4; /* horizontal index (0-based) */
+
+  Reveal.on('fragmentshown', function(event) {
+    var indices = Reveal.getIndices();
+    if (indices.h !== ORM_PRM_SLIDE_H) return;
+    var fi = event.fragment ? parseInt(event.fragment.getAttribute('data-fragment-index')) : -1;
+    if (fi === 1) applyORM();
+    if (fi === 2) applyPRM();
+  });
+
+  Reveal.on('fragmenthidden', function(event) {
+    var indices = Reveal.getIndices();
+    if (indices.h !== ORM_PRM_SLIDE_H) return;
+    var fi = event.fragment ? parseInt(event.fragment.getAttribute('data-fragment-index')) : -1;
+    if (fi === 1) resetORM();
+    if (fi === 2) resetPRM();
+  });
+})();
+</script>
+
+<!--xnav-injected--><style>
+.xnav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:8px;align-items:center;font-family:Inter,system-ui,sans-serif;}
+.xnav-b{background:#FFFFFF;border:1px solid #E2E0D9;color:#1A1A18;border-radius:8px;padding:3px 11px;font-size:13px;text-decoration:none;}
+.xnav-b:hover{background:#F1EFE8;}
+.xnav-b.dis{opacity:.35;pointer-events:none;}
+.xnav-home{background:transparent;border:none;color:#6B6A65;font-size:12px;text-decoration:none;padding:3px 6px;}
+.xnav-lbl{color:#6B6A65;font-size:12px;padding:0 6px;letter-spacing:.02em;}
+</style>
+<div class="xnav"><a class="xnav-b" href="section_02_llm_rl_problem.html">↑ prev</a><a class="xnav-home" href="../index.html">☰ index</a><span class="xnav-lbl">Reward Modeling</span><a class="xnav-b" href="section_06_rl_ppo_grpo.html">next ↓</a></div>
+<script>
+(function(){
+  var order=["section_00_motivation.html","section_01_recipe_map.html","section_04_sft.html","section_03_three_families.html","section_02_llm_rl_problem.html","section_05_reward_modeling.html","section_06_rl_ppo_grpo.html","section_07_dpo_bon.html","section_08_rlvr_reasoning.html","section_09_overopt_eval.html","section_10_wrap.html"];
+  var cur=location.pathname.split('/').pop();
+  var i=order.indexOf(cur);
+  function go(j){ if(j>=0 && j<order.length) location.href=order[j]; }
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); go(i+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); go(i-1); }
+  }, true);
+})();
+</script>
+<!--/xnav-->
+</body>
+</html>

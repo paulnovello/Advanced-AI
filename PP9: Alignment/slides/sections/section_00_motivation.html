@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Why Align? From Text Predictor to Assistant — Preference Alignment</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+/* ── slide 4: pipeline build (JS-gated, slow) ── */
+.pgate{opacity:0;transition:opacity .9s ease;}
+/* ── slide 5: mode coverage → mode collapse ── */
+#mc-wide{opacity:0;transform:scale(.18);transform-box:fill-box;transform-origin:50% 50%;
+  transition:opacity 1.6s ease, transform 2.2s cubic-bezier(.22,.8,.3,1);}
+#mc-wide.on{opacity:1;transform:scale(1);}
+#mc-wide.dim{opacity:.14;}
+#mc-junk{opacity:0;transition:opacity 1.4s ease 1.9s;}
+#mc-junk.on{opacity:1;}
+#mc-junk.out{opacity:.22;transition:opacity 1.6s ease .2s;}
+#mc-snug{opacity:0;transform:scale(1.28);transform-box:fill-box;transform-origin:50% 50%;
+  transition:opacity 1.9s ease .4s, transform 2.1s ease .4s;}
+#mc-snug.on{opacity:1;transform:scale(1);}
+#mc-modelabels{opacity:0;transition:opacity 1.3s ease 1.7s;}
+#mc-modelabels.on{opacity:1;}
+#mc-collapse-cap{opacity:0;transition:opacity 1s ease 2.2s;}
+#mc-collapse-cap.on{opacity:1;}
+#mc-right{opacity:0;transition:opacity 1.2s ease;}
+#mc-right.on{opacity:1;}
+#mc-right .rwide{opacity:.95;transition:opacity 1.6s ease 2.0s;}
+#mc-right.collapsed .rwide{opacity:.14;}
+#mc-right .rsnug{opacity:0;transition:opacity 1.8s ease 2.4s;}
+#mc-right.collapsed .rsnug{opacity:1;}
+#mc-right .rmiss{opacity:0;transition:opacity 1.2s ease 3.6s;}
+#mc-right.collapsed .rmiss{opacity:1;}
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SLIDE 1 — Title
+       ═══════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      Why Align? From Text Predictor to Assistant
+    </h2>
+    <p class="fragment" data-fragment-index="1"
+       style="font-size:.82em;margin-top:.6em;">
+      Pretraining gives you a <span class="hl-policy">next-token predictor</span> —
+      a model that continues internet text.
+      Alignment turns it into something you can actually <em>use</em>.
+    </p>
+    <p class="fragment" data-fragment-index="2" style="font-size:.7em;color:var(--muted);margin-top:1.4em;">
+      This is the layer that turned GPT into ChatGPT.
+    </p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SLIDE 2 — Animated base-vs-aligned figure (token streaming)
+       Slow theater: base panel streams first (drift turns red),
+       aligned panel answers afterwards, verdict lands last.
+       Replays from t=0 whenever the slide is entered.
+       ═══════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>The Same Prompt. Two Very Different Models.</h2>
+    <p style="font-size:.74em;color:var(--muted);margin-bottom:.5em;">
+      Prompt: <strong style="color:#1A1A18">"The president of the United States in 2006 was"</strong>
+    </p>
+
+    <svg id="tok-svg" viewBox="0 0 1100 340" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-height:300px;display:block;margin:0 auto;">
+
+      <!-- LEFT panel — Base model -->
+      <rect x="4" y="4" width="518" height="332" rx="14" class="node" stroke-width="2"/>
+      <text x="263" y="34" text-anchor="middle" font-size="13" class="lbl muted"
+            style="text-transform:uppercase;letter-spacing:.1em;">Base model (Llama 3.1 405B — no RLHF)</text>
+      <line x1="20" y1="44" x2="502" y2="44" stroke="var(--line)" stroke-width="1"/>
+
+      <!-- BASE tokens — slow stagger -->
+      <g opacity="0">
+        <rect x="20" y="58" width="84" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="62" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">George</text>
+        <animate attributeName="opacity" from="0" to="1" begin="0.6s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="112" y="58" width="36" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="130" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">W.</text>
+        <animate attributeName="opacity" from="0" to="1" begin="1.05s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="156" y="58" width="52" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="182" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">Bush</text>
+        <animate attributeName="opacity" from="0" to="1" begin="1.5s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="216" y="58" width="24" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="228" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">,</text>
+        <animate attributeName="opacity" from="0" to="1" begin="1.9s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="248" y="58" width="22" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="259" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">the</text>
+        <animate attributeName="opacity" from="0" to="1" begin="2.3s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="278" y="58" width="66" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="311" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">governor</text>
+        <animate attributeName="opacity" from="0" to="1" begin="2.75s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="352" y="58" width="24" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="364" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">of</text>
+        <animate attributeName="opacity" from="0" to="1" begin="3.15s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="384" y="58" width="60" height="26" rx="6" fill="var(--bg-2)" stroke="var(--line)" stroke-width="1"/>
+        <text x="414" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#6B6A65">Florida</text>
+        <animate attributeName="opacity" from="0" to="1" begin="3.55s" dur="0.35s" fill="freeze"/>
+      </g>
+      <!-- row 2 — metadata drift tokens (red = leaving the question behind) -->
+      <g opacity="0">
+        <rect x="20" y="94" width="60" height="26" rx="6" fill="var(--bg-2)" stroke="#C0392B" stroke-width="1"/>
+        <text x="50" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#C0392B">Sept. 1</text>
+        <animate attributeName="opacity" from="0" to="1" begin="4.3s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="88" y="94" width="22" height="26" rx="6" fill="var(--bg-2)" stroke="#C0392B" stroke-width="1"/>
+        <text x="99" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#C0392B">–</text>
+        <animate attributeName="opacity" from="0" to="1" begin="4.7s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="118" y="94" width="30" height="26" rx="6" fill="var(--bg-2)" stroke="#C0392B" stroke-width="1"/>
+        <text x="133" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#C0392B">U.S.</text>
+        <animate attributeName="opacity" from="0" to="1" begin="5.05s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="156" y="94" width="66" height="26" rx="6" fill="var(--bg-2)" stroke="#C0392B" stroke-width="1"/>
+        <text x="189" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#C0392B">President</text>
+        <animate attributeName="opacity" from="0" to="1" begin="5.4s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="230" y="94" width="44" height="26" rx="6" fill="var(--bg-2)" stroke="#C0392B" stroke-width="1"/>
+        <text x="252" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#C0392B">Bush</text>
+        <animate attributeName="opacity" from="0" to="1" begin="5.75s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="282" y="94" width="52" height="26" rx="6" fill="var(--bg-2)" stroke="#C0392B" stroke-width="1"/>
+        <text x="308" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="#C0392B">signs…</text>
+        <animate attributeName="opacity" from="0" to="1" begin="6.1s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <text x="263" y="150" text-anchor="middle" font-size="12" fill="#C0392B"
+              font-style="italic">Completing the internet document.</text>
+        <text x="263" y="166" text-anchor="middle" font-size="11" fill="var(--muted)">Adds metadata, tangential facts…</text>
+        <animate attributeName="opacity" from="0" to="1" begin="6.9s" dur="0.5s" fill="freeze"/>
+      </g>
+
+      <!-- RIGHT panel — Aligned model (starts once the base has drifted) -->
+      <rect x="582" y="4" width="518" height="332" rx="14" fill="var(--bg-2)"
+            stroke="var(--c-policy)" stroke-width="2.5"/>
+      <text x="841" y="34" text-anchor="middle" font-size="13" fill="var(--c-policy)"
+            style="text-transform:uppercase;letter-spacing:.1em;">RLHF-aligned model (Tülu 3 405B)</text>
+      <line x1="598" y1="44" x2="1080" y2="44" stroke="var(--c-policy)" stroke-width="1" opacity="0.4"/>
+
+      <g opacity="0">
+        <rect x="598" y="58" width="84" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="640" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">George</text>
+        <animate attributeName="opacity" from="0" to="1" begin="8.2s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="690" y="58" width="36" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="708" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">W.</text>
+        <animate attributeName="opacity" from="0" to="1" begin="8.6s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="734" y="58" width="52" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="760" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">Bush</text>
+        <animate attributeName="opacity" from="0" to="1" begin="9.0s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="794" y="58" width="32" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="810" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">was</text>
+        <animate attributeName="opacity" from="0" to="1" begin="9.4s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="834" y="58" width="22" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="845" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">the</text>
+        <animate attributeName="opacity" from="0" to="1" begin="9.8s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="864" y="58" width="66" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="897" y="75" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">president</text>
+        <animate attributeName="opacity" from="0" to="1" begin="10.2s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="598" y="94" width="24" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="610" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">in</text>
+        <animate attributeName="opacity" from="0" to="1" begin="10.6s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="630" y="94" width="40" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="650" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">2006</text>
+        <animate attributeName="opacity" from="0" to="1" begin="11.0s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <rect x="678" y="94" width="24" height="26" rx="6" fill="var(--bg-2)" stroke="var(--c-policy)" stroke-width="1.5"/>
+        <text x="690" y="111" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="var(--c-policy)">.</text>
+        <animate attributeName="opacity" from="0" to="1" begin="11.4s" dur="0.35s" fill="freeze"/>
+      </g>
+      <g opacity="0">
+        <text x="841" y="150" text-anchor="middle" font-size="12" fill="var(--c-policy)"
+              font-style="italic">Answers the question. Then stops.</text>
+        <text x="841" y="166" text-anchor="middle" font-size="11" fill="var(--muted)">Concise · helpful · human-facing</text>
+        <animate attributeName="opacity" from="0" to="1" begin="12.2s" dur="0.5s" fill="freeze"/>
+      </g>
+
+      <!-- bottom verdict -->
+      <g opacity="0">
+        <text x="550" y="220" text-anchor="middle" font-size="14" fill="var(--fg)" font-weight="700">Same architecture. Same pretraining data.</text>
+        <text x="550" y="242" text-anchor="middle" font-size="13" fill="var(--c-policy)">The gap is entirely post-training.</text>
+        <animate attributeName="opacity" from="0" to="1" begin="13.4s" dur="0.6s" fill="freeze"/>
+      </g>
+    </svg>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SLIDE 3 — What preference alignment is + color legend
+       ═══════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>What Is Preference Alignment?</h2>
+
+    <div class="grid2" style="margin-top:.3em;gap:14px;">
+      <div class="fragment" data-fragment-index="1">
+        <div class="card tight">
+          <h3 style="font-size:.8em;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Pretraining</h3>
+          <p style="font-size:.82em;">Train on internet text via next-token prediction.
+            Learns <em>everything humans have written</em> — but not <em>how to help</em>.</p>
+        </div>
+      </div>
+      <div class="fragment" data-fragment-index="2">
+        <div class="card tight" style="border-color:var(--c-pref);">
+          <h3 style="font-size:.8em;color:var(--c-pref);text-transform:uppercase;letter-spacing:.08em;">Preference Alignment</h3>
+          <p style="font-size:.82em;">Use <span style="color:var(--c-pref);font-weight:600">human feedback signals</span>
+            to steer the pretrained model toward outputs that are helpful, harmless, and honest —
+            shaping <em>style, tone, and behavior</em>.</p>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SLIDE 4 — RLHF in Three Steps: animated SVG pipeline
+       (JS-gated build; one click per stage, slow fades)
+       ═══════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Post-Training in Three Steps</h2>
+    <p style="font-size:.78em;color:var(--muted);margin-bottom:.3em;">
+      The canonical recipe from InstructGPT (OpenAI, 2022) — still the backbone of every modern assistant.
+    </p>
+
+    <svg id="pipe-svg" viewBox="0 0 1060 280" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-height:260px;display:block;margin:.2em auto 0;">
+
+      <!-- ── Node 1: Base Model (always visible) ── -->
+      <g id="pipe-base">
+        <rect x="20" y="90" width="160" height="70" rx="14" class="node" stroke-width="2"/>
+        <text x="100" y="119" text-anchor="middle" font-size="13" font-weight="700" fill="var(--muted)">Base Model</text>
+        <text x="100" y="137" text-anchor="middle" font-size="11" fill="var(--muted)">next-token predictor</text>
+      </g>
+
+      <!-- ── Arrow 1 → SFT ── -->
+      <g id="pipe-arr1" class="pgate">
+        <line x1="180" y1="125" x2="240" y2="125" stroke="var(--c-logp)" stroke-width="2.5"
+              stroke-dasharray="8 6" class="flow"/>
+        <polygon points="240,119 254,125 240,131" fill="var(--c-logp)"/>
+      </g>
+
+      <!-- ── Node 2: SFT ── -->
+      <g id="pipe-sft" class="pgate">
+        <rect x="254" y="90" width="160" height="70" rx="14" fill="var(--bg-2)"
+              stroke="var(--c-logp)" stroke-width="2.5"/>
+        <text x="334" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="var(--c-logp)">① SFT</text>
+        <text x="334" y="133" text-anchor="middle" font-size="11" fill="var(--muted)">Supervised</text>
+        <text x="334" y="148" text-anchor="middle" font-size="11" fill="var(--muted)">Fine-Tuning</text>
+      </g>
+      <g id="pipe-sft-note" class="pgate">
+        <text x="334" y="190" text-anchor="middle" font-size="11" fill="var(--muted)">Q&amp;A format · style</text>
+      </g>
+
+      <!-- ── Arrow 2: SFT → RM ── -->
+      <g id="pipe-arr2" class="pgate">
+        <line x1="414" y1="125" x2="474" y2="125" stroke="var(--c-reward)" stroke-width="2.5"
+              stroke-dasharray="8 6" class="flow"/>
+        <polygon points="474,119 488,125 474,131" fill="var(--c-reward)"/>
+      </g>
+
+      <!-- ── Preference pairs feeder (top) ── -->
+      <g id="pipe-pref" class="pgate">
+        <rect x="420" y="14" width="148" height="40" rx="10" fill="var(--bg-2)"
+              stroke="var(--c-pref)" stroke-width="1.5"/>
+        <text x="494" y="30" text-anchor="middle" font-size="11" fill="var(--c-pref)" font-weight="600">Preference data</text>
+        <text x="494" y="46" text-anchor="middle" font-size="10" fill="var(--muted)">y_w ≻ y_l pairs</text>
+        <line x1="494" y1="54" x2="534" y2="90" stroke="var(--c-pref)" stroke-width="1.5"
+              stroke-dasharray="5 4" class="flow"/>
+      </g>
+
+      <!-- ── Node 3: Reward Model ── -->
+      <g id="pipe-rm" class="pgate">
+        <rect x="488" y="90" width="160" height="70" rx="14" fill="var(--bg-2)"
+              stroke="var(--c-reward)" stroke-width="2.5"/>
+        <text x="568" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="var(--c-reward)">② Reward Model</text>
+        <text x="568" y="133" text-anchor="middle" font-size="11" fill="var(--muted)">Learn human</text>
+        <text x="568" y="148" text-anchor="middle" font-size="11" fill="var(--muted)">preferences → scalar</text>
+      </g>
+      <g id="pipe-rm-note" class="pgate">
+        <text x="568" y="190" text-anchor="middle" font-size="11" fill="var(--muted)">r(x,y) ∈ ℝ</text>
+      </g>
+
+      <!-- ── Arrow 3: RM → RL ── -->
+      <g id="pipe-arr3" class="pgate">
+        <line x1="648" y1="125" x2="708" y2="125" stroke="var(--c-policy)" stroke-width="2.5"
+              stroke-dasharray="8 6" class="flow"/>
+        <polygon points="708,119 722,125 708,131" fill="var(--c-policy)"/>
+      </g>
+
+      <!-- ── Node 4: RL Optimization ── -->
+      <g id="pipe-rl" class="pgate">
+        <rect x="722" y="90" width="160" height="70" rx="14" fill="var(--bg-2)"
+              stroke="var(--c-policy)" stroke-width="2.5"/>
+        <text x="802" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="var(--c-policy)">③ RL Optim.</text>
+        <text x="802" y="133" text-anchor="middle" font-size="11" fill="var(--muted)">Sample · score ·</text>
+        <text x="802" y="148" text-anchor="middle" font-size="11" fill="var(--muted)">update π<tspan font-style="italic">θ</tspan></text>
+      </g>
+      <g id="pipe-rl-note" class="pgate">
+        <text x="802" y="190" text-anchor="middle" font-size="11" fill="var(--muted)">PPO / GRPO / DPO</text>
+      </g>
+
+      <!-- ── Arrow 4: → Aligned Model ── -->
+      <g id="pipe-arr4" class="pgate">
+        <line x1="882" y1="125" x2="930" y2="125" stroke="var(--accent)" stroke-width="2.5"
+              stroke-dasharray="8 6" class="flow"/>
+        <polygon points="930,119 944,125 930,131" fill="var(--accent)"/>
+      </g>
+
+      <!-- ── Node 5: Aligned Model ── -->
+      <g id="pipe-aligned" class="pgate">
+        <rect x="944" y="90" width="110" height="70" rx="14" fill="var(--bg-2)"
+              stroke="var(--accent)" stroke-width="2.5"/>
+        <text x="999" y="119" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">Aligned</text>
+        <text x="999" y="136" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">Model</text>
+        <text x="999" y="152" text-anchor="middle" font-size="10" fill="var(--muted)">ChatGPT / Claude</text>
+      </g>
+
+      <!-- KL constraint annotation -->
+      <g id="pipe-kl" class="pgate">
+        <rect x="690" y="220" width="240" height="38" rx="8" fill="rgba(126,60,158,.12)"
+              stroke="var(--c-kl)" stroke-width="1.5"/>
+        <text x="810" y="237" text-anchor="middle" font-size="11" fill="var(--c-kl)" font-weight="600">KL penalty keeps π<tspan font-style="italic">θ</tspan> near π<tspan baseline-shift="sub" font-size="9">ref</tspan></text>
+        <text x="810" y="251" text-anchor="middle" font-size="10" fill="var(--muted)">prevents reward hacking / forgetting</text>
+      </g>
+    </svg>
+
+    <!-- Fragment triggers via JS listener (see script at bottom) -->
+    <div id="pipe-frag-2" class="fragment" data-fragment-index="2" style="display:none;"></div>
+    <div id="pipe-frag-3" class="fragment" data-fragment-index="3" style="display:none;"></div>
+    <div id="pipe-frag-4" class="fragment" data-fragment-index="4" style="display:none;"></div>
+    <div id="pipe-frag-5" class="fragment" data-fragment-index="5" style="display:none;"></div>
+
+    <!-- Explanatory callouts that appear with each step -->
+    <div class="fragment callout" data-fragment-index="2"
+         style="border-color:var(--c-logp);background:rgba(154,122,14,.08);font-size:.76em;">
+      <span style="color:var(--c-logp);font-weight:600">SFT:</span>
+      Fine-tune on curated Q&amp;A examples → teaches the model the <em>format</em> of helpful responses.
+      Per-token cross-entropy loss.
+    </div>
+    <div class="fragment callout reward" data-fragment-index="3"
+         style="font-size:.76em;">
+      <span class="hl-reward">Reward Model:</span>
+      Fine-tune a second LM on preference pairs (y<sub>w</sub> ≻ y<sub>l</sub>) to output a scalar
+      <span class="hl-reward">r(x,y)</span>.
+      Bradley–Terry loss. This <em>is</em> the optimization target for RL.
+    </div>
+    <div class="fragment callout policy" data-fragment-index="4"
+         style="font-size:.76em;">
+      <span class="hl-policy">RL Optimization:</span>
+      Sample completions from <span class="hl-policy">π<sub>θ</sub></span>,
+      score with <span class="hl-reward">RM</span>,
+      update policy via RL to make better completions more likely.
+      + <span class="hl-kl">KL penalty</span> to stay close to π<sub>ref</sub>.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SLIDE 5 — NEW: Mode coverage → mode collapse
+       "Pre-training is all about mode coverage;
+        post-training is all about mode collapsing."
+       Click 1: base distribution grows to cover ALL of p_data
+                (incl. junk modes) — coverage.
+       Click 2: alignment collapses the mass onto preferred modes;
+                junk fades; modes get LLM-meaningful names.
+       Click 3: right panel — a mode pretraining missed can never
+                be elicited (collapse runs, ✗ stays uncovered).
+       Click 4: the aphorism + elicitation takeaway.
+       ═══════════════════════════════════════════════════════════ -->
+  <section>
+    <h2>Collapse Onto the Good Modes</h2>
+    <p style="font-size:.72em;color:var(--muted);margin-bottom:.2em;">
+      The base model is a distribution over <em>everything humans write</em>.
+      Alignment doesn't add knowledge — it <strong style="color:#1A1A18">moves probability mass</strong>.
+    </p>
+
+    <svg id="mc-svg" viewBox="0 0 1060 400" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%;max-height:400px;display:block;margin:0 auto;">
+
+      <!-- ════ LEFT PANEL — good coverage, then collapse ════ -->
+      <text x="260" y="22" text-anchor="middle" font-size="12" class="lbl muted"
+            style="text-transform:uppercase;letter-spacing:.12em;">① Pretraining covers · ② alignment collapses</text>
+
+      <!-- p_data dashed outline -->
+      <path d="M 90,200 C 70,120 150,62 250,56 C 350,50 452,82 462,162 C 472,242 420,310 320,332 C 220,354 110,282 90,200 Z"
+            fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="7 6" opacity=".8"/>
+      <text x="92" y="345" font-size="15" fill="var(--fg)" font-style="italic">p</text>
+      <text x="101" y="350" font-size="11" fill="var(--fg)" font-style="italic">data</text>
+
+      <!-- wide blue blob = base model support (grows on click 1, dims on click 2) -->
+      <g id="mc-wide">
+        <path d="M 100,200 C 82,128 156,72 251,66 C 345,60 440,90 450,164 C 460,238 412,302 318,322 C 224,342 118,272 100,200 Z"
+              fill="rgba(29,111,184,.30)" stroke="var(--c-policy)" stroke-width="2"/>
+        <text x="160" y="110" font-size="11" fill="var(--c-policy)" font-weight="600">base model π</text>
+        <text x="160" y="124" font-size="10" fill="var(--muted)">mass everywhere</text>
+      </g>
+
+      <!-- junk modes — covered by pretraining, undesired -->
+      <g id="mc-junk">
+        <circle cx="140" cy="262" r="12" fill="rgba(107,106,101,.35)" stroke="var(--muted)" stroke-width="1"/>
+        <text x="140" y="288" text-anchor="middle" font-size="9.5" fill="var(--muted)">SEO spam</text>
+        <circle cx="398" cy="208" r="12" fill="rgba(107,106,101,.35)" stroke="var(--muted)" stroke-width="1"/>
+        <text x="398" y="234" text-anchor="middle" font-size="9.5" fill="var(--muted)">forum flames</text>
+        <circle cx="248" cy="96" r="10" fill="rgba(107,106,101,.35)" stroke="var(--muted)" stroke-width="1"/>
+        <text x="248" y="82" text-anchor="middle" font-size="9.5" fill="var(--muted)">raw logs</text>
+      </g>
+
+      <!-- preferred modes (always visible: they exist in the data) -->
+      <circle cx="200" cy="170" r="30" fill="rgba(194,24,91,.55)" stroke="var(--c-pref)" stroke-width="2"/>
+      <circle cx="330" cy="140" r="22" fill="rgba(194,24,91,.55)" stroke="var(--c-pref)" stroke-width="2"/>
+      <circle cx="300" cy="262" r="26" fill="rgba(194,24,91,.55)" stroke="var(--c-pref)" stroke-width="2"/>
+
+      <!-- snug blob = aligned model (appears on click 2) -->
+      <g id="mc-snug">
+        <path d="M 162,178 C 152,128 222,108 272,124 C 290,96 356,98 362,134 C 368,168 332,172 322,194 C 350,222 340,272 300,292 C 262,310 252,250 256,222 C 220,220 170,214 162,178 Z"
+              fill="rgba(29,111,184,.34)" stroke="var(--c-policy)" stroke-width="2.5"/>
+      </g>
+
+      <!-- mode names appear at collapse time: the modes ARE style/format/refusals -->
+      <g id="mc-modelabels">
+        <text x="200" y="173" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="700">concise</text>
+        <text x="200" y="184" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="700">answers</text>
+        <text x="330" y="138" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="700">safe</text>
+        <text x="330" y="149" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="700">refusals</text>
+        <text x="300" y="260" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="700">warm</text>
+        <text x="300" y="271" text-anchor="middle" font-size="9.5" fill="#fff" font-weight="700">tone</text>
+      </g>
+      <g id="mc-collapse-cap">
+        <text x="260" y="378" text-anchor="middle" font-size="11.5" fill="var(--c-policy)" font-weight="600">
+          mass re-weighted onto preferred modes — style, format, refusals</text>
+      </g>
+
+      <!-- ════ RIGHT PANEL — bad coverage: a mode can't be elicited ════ -->
+      <g id="mc-right">
+        <text x="800" y="22" text-anchor="middle" font-size="12" class="lbl muted"
+              style="text-transform:uppercase;letter-spacing:.12em;">If pretraining missed a mode…</text>
+
+        <!-- p_data outline (same data!) -->
+        <path d="M 630,200 C 610,120 690,62 790,56 C 890,50 992,82 1002,162 C 1012,242 960,310 860,332 C 760,354 650,282 630,200 Z"
+              fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="7 6" opacity=".8"/>
+        <text x="632" y="345" font-size="15" fill="var(--fg)" font-style="italic">p</text>
+        <text x="641" y="350" font-size="11" fill="var(--fg)" font-style="italic">data</text>
+
+        <!-- preferred modes: two covered, one missed (top right) -->
+        <circle cx="740" cy="180" r="27" fill="rgba(194,24,91,.55)" stroke="var(--c-pref)" stroke-width="2"/>
+        <circle cx="840" cy="262" r="23" fill="rgba(194,24,91,.55)" stroke="var(--c-pref)" stroke-width="2"/>
+        <circle cx="950" cy="110" r="21" fill="rgba(194,24,91,.55)" stroke="var(--c-pref)" stroke-width="2"/>
+
+        <!-- bad-coverage base blob: avoids the top-right corner -->
+        <g class="rwide">
+          <path d="M 645,205 C 630,135 700,80 780,76 C 850,73 900,110 905,168 C 910,230 880,295 815,315 C 740,338 660,275 645,205 Z"
+                fill="rgba(29,111,184,.30)" stroke="var(--c-policy)" stroke-width="2"/>
+          <text x="705" y="120" font-size="11" fill="var(--c-policy)" font-weight="600">base model π</text>
+          <text x="705" y="134" font-size="10" fill="var(--muted)">incomplete coverage</text>
+        </g>
+
+        <!-- collapsed blob hugging only the two covered modes -->
+        <g class="rsnug">
+          <path d="M 706,190 C 700,148 752,134 782,156 C 808,174 798,200 790,216 C 824,222 872,228 874,262 C 876,296 832,304 806,290 C 778,276 766,250 758,232 C 726,228 710,214 706,190 Z"
+                fill="rgba(29,111,184,.34)" stroke="var(--c-policy)" stroke-width="2.5"/>
+        </g>
+
+        <!-- the missed mode: pulsing ring + verdict -->
+        <g class="rmiss">
+          <circle cx="950" cy="110" r="30" fill="none" stroke="var(--c-value)" stroke-width="2">
+            <animate attributeName="r" values="26;36;26" dur="3s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values=".9;.25;.9" dur="3s" repeatCount="indefinite"/>
+          </circle>
+          <text x="950" y="64" text-anchor="middle" font-size="12" fill="var(--c-value)" font-weight="700">✗ never covered</text>
+          <text x="884" y="378" text-anchor="middle" font-size="11.5" fill="var(--c-value)" font-weight="600">
+            RLHF can only amplify modes pretraining already covered</text>
+        </g>
+      </g>
+    </svg>
+
+    <!-- Fragment triggers -->
+    <div id="mc-frag-1" class="fragment" data-fragment-index="1" style="display:none;"></div>
+    <div id="mc-frag-2" class="fragment" data-fragment-index="2" style="display:none;"></div>
+    <div id="mc-frag-3" class="fragment" data-fragment-index="3" style="display:none;"></div>
+
+    <div class="fragment" data-fragment-index="4" style="text-align:center;margin-top:.1em;">
+      <div class="eqresult" style="font-size:.72em;">
+        “Pre-training is all about <span class="hl-policy">mode coverage</span>;
+        post-training is all about <span style="color:var(--c-pref);font-weight:600">mode collapsing</span>.”
+        <span style="color:var(--muted);font-weight:400;font-size:.92em;">
+          — <strong style="color:var(--c-adv)">elicitation</strong>: it can't create a missing mode.</span>
+      </div>
+    </div>
+  </section>
+
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/math/math.min.js"></script>
+<script>
+Reveal.initialize({
+  hash:true, slideNumber:'c/t', transition:'slide', backgroundTransition:'fade',
+  width:1280, height:720, margin:0.04,
+  katex:{ delimiters:[
+    {left:'\\[',right:'\\]',display:true},
+    {left:'$',right:'$',display:false}],
+    trust:true, strict:false },
+  plugins:[ RevealMath.KaTeX ]
+});
+
+/* ─── Replay auto-running SMIL when a slide is (re)entered ─── */
+function restartSVGs(slide){
+  if(!slide) return;
+  slide.querySelectorAll('svg').forEach(function(s){
+    if(s.querySelector('animate,animateTransform,animateMotion')){
+      try { s.setCurrentTime(0); } catch(e) {}
+    }
+  });
+}
+Reveal.on('ready', function(e){ restartSVGs(e.currentSlide); });
+Reveal.on('slidechanged', function(e){ restartSVGs(e.currentSlide); });
+
+/* ─── Section-scoped figure animation listeners ─── */
+function setOp(id, v){ var el=document.getElementById(id); if(el) el.style.opacity=v; }
+function addCls(id, c){ var el=document.getElementById(id); if(el) el.classList.add(c); }
+function rmCls(id, c){ var el=document.getElementById(id); if(el) el.classList.remove(c); }
+
+Reveal.on('fragmentshown', function(event) {
+  var fid = event.fragment.id || '';
+
+  /* ── Pipeline SVG (slide 4) — slow staged build ── */
+  if (fid === 'pipe-frag-2') {
+    setOp('pipe-sft','1'); setOp('pipe-arr1','1');
+    setTimeout(function(){ setOp('pipe-sft-note','1'); }, 800);
+  }
+  if (fid === 'pipe-frag-3') {
+    setOp('pipe-rm','1'); setOp('pipe-arr2','1'); setOp('pipe-pref','1');
+    setTimeout(function(){ setOp('pipe-rm-note','1'); }, 800);
+  }
+  if (fid === 'pipe-frag-4') {
+    setOp('pipe-rl','1'); setOp('pipe-arr3','1'); setOp('pipe-kl','1');
+    setTimeout(function(){ setOp('pipe-rl-note','1'); }, 800);
+  }
+  if (fid === 'pipe-frag-5') { setOp('pipe-aligned','1'); setOp('pipe-arr4','1'); }
+
+  /* ── Mode-collapse SVG (slide 5) ── */
+  if (fid === 'mc-frag-1') { addCls('mc-wide','on'); addCls('mc-junk','on'); }
+  if (fid === 'mc-frag-2') {
+    addCls('mc-wide','dim'); addCls('mc-snug','on');
+    addCls('mc-modelabels','on'); addCls('mc-junk','out'); addCls('mc-collapse-cap','on');
+  }
+  if (fid === 'mc-frag-3') { addCls('mc-right','on'); addCls('mc-right','collapsed'); }
+});
+
+Reveal.on('fragmenthidden', function(event) {
+  var fid = event.fragment.id || '';
+
+  if (fid === 'pipe-frag-5') { setOp('pipe-aligned','0'); setOp('pipe-arr4','0'); }
+  if (fid === 'pipe-frag-4') { setOp('pipe-rl','0'); setOp('pipe-arr3','0'); setOp('pipe-rl-note','0'); setOp('pipe-kl','0'); }
+  if (fid === 'pipe-frag-3') { setOp('pipe-rm','0'); setOp('pipe-arr2','0'); setOp('pipe-pref','0'); setOp('pipe-rm-note','0'); }
+  if (fid === 'pipe-frag-2') { setOp('pipe-sft','0'); setOp('pipe-arr1','0'); setOp('pipe-sft-note','0'); }
+
+  if (fid === 'mc-frag-1') { rmCls('mc-wide','on'); rmCls('mc-junk','on'); }
+  if (fid === 'mc-frag-2') {
+    rmCls('mc-wide','dim'); rmCls('mc-snug','on');
+    rmCls('mc-modelabels','on'); rmCls('mc-junk','out'); rmCls('mc-collapse-cap','on');
+  }
+  if (fid === 'mc-frag-3') { rmCls('mc-right','on'); rmCls('mc-right','collapsed'); }
+});
+</script>
+
+<!--xnav--><style>
+.xnav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:8px;align-items:center;font-family:Inter,system-ui,sans-serif;}
+.xnav-b{background:#FFFFFF;border:1px solid #E2E0D9;color:#1A1A18;border-radius:8px;padding:3px 11px;font-size:13px;text-decoration:none;}
+.xnav-b:hover{background:#F1EFE8;}
+.xnav-b.dis{opacity:.35;pointer-events:none;}
+.xnav-home{background:transparent;border:none;color:#6B6A65;font-size:12px;text-decoration:none;padding:3px 6px;}
+.xnav-lbl{color:#6B6A65;font-size:12px;padding:0 6px;letter-spacing:.02em;}
+</style>
+<div class="xnav"><a class="xnav-b dis">↑ prev</a><a class="xnav-home" href="../index.html">☰ index</a><span class="xnav-lbl">Why Align?</span><a class="xnav-b" href="section_01_recipe_map.html">next ↓</a></div>
+<script>
+(function(){
+  var order=["section_00_motivation.html","section_01_recipe_map.html","section_04_sft.html","section_03_three_families.html","section_02_llm_rl_problem.html","section_05_reward_modeling.html","section_06_rl_ppo_grpo.html","section_07_dpo_bon.html","section_08_rlvr_reasoning.html","section_09_overopt_eval.html","section_10_wrap.html"];
+  var cur=location.pathname.split('/').pop();
+  var i=order.indexOf(cur);
+  function go(j){ if(j>=0 && j<order.length) location.href=order[j]; }
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); go(i+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); go(i-1); }
+  }, true);
+})();
+</script>
+<!--/xnav-->
+</body>
+</html>

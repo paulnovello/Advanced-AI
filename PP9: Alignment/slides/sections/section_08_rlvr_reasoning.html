@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Frontier: Reasoning &amp; RLVR — Preference Alignment</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ============================================================
+     SLIDE 1 — RLVR: Correctness as Reward (title merged in)
+     ============================================================ -->
+<section>
+  <h2>The Frontier: Reasoning &amp; RLVR
+    <span class="kicker">When correctness replaces preferences</span>
+  </h2>
+
+  <p class="fragment" data-fragment-index="1" style="font-size:.83em;">
+    Standard RLHF needs a <span class="hl-reward">learned reward model</span> to judge
+    subjective quality. <strong>RLVR</strong> makes the reward model <em>optional</em> —
+    a <span class="hl-reward">verification function</span> returns a definitive 0/1 score.
+  </p>
+
+  <div class="grid2 fragment" data-fragment-index="2" style="margin-top:.4em;font-size:.85em;">
+    <div class="card tight">
+      <h3 style="margin-top:0;">Math</h3>
+      <p style="font-size:.78em;">Model generates chain-of-thought. Answer extracted via
+        <code>\boxed{}</code> or "The answer is:". Reward = 1 iff extracted answer
+        matches ground truth.</p>
+    </div>
+    <div class="card tight">
+      <h3 style="margin-top:0;">Code</h3>
+      <p style="font-size:.78em;">Model writes a function. Unit tests execute it.
+        Reward = 1 if all assertions pass; 0 otherwise (or partial credit per test passed).</p>
+    </div>
+  </div>
+
+  <div class="deriv" style="margin-top:.4em;font-size:.72em;">
+    <div class="line fragment" data-fragment-index="3">
+      <div class="eq">\[ \htmlClass{k-reward}{r}(y,\,y^*) \;\in\; \{0,\,1\} \]</div>
+      <div class="why"><span class="hl-reward">Binary reward</span>: no continuous score, no learned preference model.</div>
+    </div>
+    <div class="line fragment" data-fragment-index="4">
+      <div class="eq">\[ \htmlClass{k-reward}{r}(y,\,y^*) \;=\; \mathbb{1}\!\left[\,\text{verify}(y)\;=\;y^*\,\right] \]</div>
+      <div class="why">Verify function checks the extracted answer against ground truth $y^*$ — a regex, unit test, or checker.</div>
+    </div>
+    <div class="line fragment" data-fragment-index="5">
+      <div class="eq">
+        <div class="eqresult">\[ \htmlClass{k-reward}{r}(y,\,y^*) \;=\; \mathbb{1}\!\left[\,\text{verify}(y)\;=\;y^*\,\right]
+        \quad \longrightarrow \quad \text{plug into }\htmlClass{k-adv}{A_i}\text{ for GRPO} \]</div>
+      </div>
+      <div class="why">Same <span class="hl-adv">advantage</span> used in GRPO — reward source swapped, algorithm unchanged.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SLIDE 2 — The RLVR Loop (absorbs "one machinery, two sources")
+     ============================================================ -->
+<section>
+  <h2>The RLVR Training Loop</h2>
+  <p style="font-size:.82em;color:var(--muted);">
+    Sample → verify → update. Repeat hundreds of epochs over the <em>same</em> verifiable problems.
+  </p>
+
+  <!-- ── ANIMATED LOOP SVG (slow build on slide entry) ── -->
+  <svg id="rlvr-loop" viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg"
+       style="width:100%;max-width:640px;display:block;margin:.2em auto 0;">
+
+    <defs>
+      <marker id="ah-muted" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#6B6A65"/>
+      </marker>
+      <marker id="ah-adv" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#2E7D46"/>
+      </marker>
+      <marker id="ah-reward" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#B5730F"/>
+      </marker>
+      <marker id="ah-policy" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#1D6FB8"/>
+      </marker>
+    </defs>
+
+    <!-- Prompt -->
+    <rect x="20" y="130" width="140" height="70" rx="12" class="node"/>
+    <text x="90" y="160" text-anchor="middle" class="lbl" font-size="15" font-weight="700">Prompt</text>
+    <text x="90" y="180" text-anchor="middle" class="lbl muted" font-size="12">x</text>
+
+    <!-- Policy -->
+    <rect x="230" y="110" width="170" height="110" rx="12" class="node" stroke="#1D6FB8" stroke-width="2"/>
+    <text x="315" y="155" text-anchor="middle" class="lbl c-policy" font-size="15" font-weight="700">Policy π<tspan baseline-shift="sub" font-size="11">θ</tspan></text>
+    <text x="315" y="175" text-anchor="middle" class="lbl muted" font-size="11">generates CoT</text>
+    <text x="315" y="193" text-anchor="middle" class="lbl muted" font-size="11">+ answer</text>
+
+    <!-- Verifier -->
+    <rect x="490" y="110" width="160" height="110" rx="12" class="node" stroke="#B5730F" stroke-width="2"/>
+    <text x="570" y="152" text-anchor="middle" class="lbl c-reward" font-size="15" font-weight="700">Verifier</text>
+    <text x="570" y="172" text-anchor="middle" class="lbl muted" font-size="11">regex / unit test</text>
+    <rect x="520" y="184" width="100" height="26" rx="8" fill="#B5730F" fill-opacity=".18" stroke="#B5730F" stroke-width="1.2"/>
+    <text x="570" y="201" text-anchor="middle" class="lbl" font-size="12" fill="#B5730F" font-weight="700">r ∈ {0, 1}</text>
+
+    <!-- GRPO update -->
+    <rect x="720" y="125" width="155" height="80" rx="12" class="node" stroke="#2E7D46" stroke-width="2"/>
+    <text x="797" y="160" text-anchor="middle" class="lbl c-adv" font-size="15" font-weight="700">GRPO update</text>
+    <text x="797" y="180" text-anchor="middle" class="lbl muted" font-size="11">↑ p(correct traces)</text>
+
+    <!-- arrows (slow, staggered) -->
+    <line x1="160" y1="165" x2="228" y2="165" stroke="#6B6A65" stroke-width="2" stroke-dasharray="70" stroke-dashoffset="70" marker-end="url(#ah-muted)">
+      <animate attributeName="stroke-dashoffset" from="70" to="0" dur="0.8s" begin="0.5s" fill="freeze"/>
+    </line>
+    <line x1="400" y1="165" x2="488" y2="165" stroke="#1D6FB8" stroke-width="2.5" stroke-dasharray="90" stroke-dashoffset="90" marker-end="url(#ah-policy)">
+      <animate attributeName="stroke-dashoffset" from="90" to="0" dur="0.8s" begin="1.9s" fill="freeze"/>
+    </line>
+    <line x1="650" y1="165" x2="718" y2="165" stroke="#B5730F" stroke-width="2.5" stroke-dasharray="70" stroke-dashoffset="70" marker-end="url(#ah-reward)">
+      <animate attributeName="stroke-dashoffset" from="70" to="0" dur="0.8s" begin="3.3s" fill="freeze"/>
+    </line>
+
+    <!-- feedback arc -->
+    <path d="M797,207 C797,290 315,290 315,222"
+          stroke="#2E7D46" stroke-width="2.5" fill="none"
+          stroke-dasharray="560" stroke-dashoffset="560"
+          marker-end="url(#ah-adv)">
+      <animate attributeName="stroke-dashoffset" from="560" to="0" dur="1.5s" begin="4.6s" fill="freeze"/>
+    </path>
+    <text x="556" y="306" text-anchor="middle" font-size="12" fill="#2E7D46" opacity="0">
+      repeat (hundreds of epochs)
+      <animate attributeName="opacity" from="0" to="1" dur="0.6s" begin="6.0s" fill="freeze"/>
+    </text>
+
+    <!-- verifier flash ✓ / ✗ -->
+    <text x="570" y="100" text-anchor="middle" font-size="24" fill="#2E7D46" opacity="0" id="check-mark">✓</text>
+    <text x="570" y="100" text-anchor="middle" font-size="24" fill="#C0392B" opacity="0" id="cross-mark">✗</text>
+    <animate xlink:href="#check-mark" attributeName="opacity"
+      values="0;0;1;1;0;0;0;0;1;1;0" keyTimes="0;.3;.35;.42;.48;.5;.7;.75;.8;.87;1"
+      dur="8s" repeatCount="indefinite"/>
+    <animate xlink:href="#cross-mark" attributeName="opacity"
+      values="0;0;0;0;0;1;1;0;0;0;0" keyTimes="0;.48;.5;.55;.58;.60;.67;.72;.8;.9;1"
+      dur="8s" repeatCount="indefinite"/>
+
+    <!-- pulsing policy border -->
+    <rect x="230" y="110" width="170" height="110" rx="12" fill="none"
+          stroke="#1D6FB8" stroke-width="0" opacity="0">
+      <animate attributeName="stroke-width" values="0;4;0" dur="4s" begin="4.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0.6;0" dur="4s" begin="4.2s" repeatCount="indefinite"/>
+    </rect>
+
+    <text x="90" y="122" text-anchor="middle" class="lbl muted" font-size="11">input</text>
+    <text x="315" y="104" text-anchor="middle" class="lbl" font-size="11" fill="#1D6FB8">① generate</text>
+    <text x="570" y="104" text-anchor="middle" class="lbl" font-size="11" fill="#B5730F">② verify</text>
+    <text x="797" y="118" text-anchor="middle" class="lbl" font-size="11" fill="#2E7D46">③ update</text>
+  </svg>
+
+  <!-- One machinery, two reward sources (absorbed from old slide 6) -->
+  <div class="deriv fragment" data-fragment-index="1" style="margin-top:.2em;font-size:.7em;">
+    <div class="line">
+      <div class="eq">\[ \text{RLHF:}\quad \htmlClass{k-adv}{A_i} \;\propto\; \htmlClass{k-reward}{r_{\phi}(x,y_i)} \;-\; \text{baseline} \]</div>
+      <div class="why"><span class="hl-reward">Learned RM</span> $r_\phi$ scores subjective quality.</div>
+    </div>
+    <div class="line fragment" data-fragment-index="2">
+      <div class="eq">\[ \text{RLVR:}\quad \htmlClass{k-adv}{A_i} \;\propto\; \htmlClass{k-reward}{\mathbb{1}[\text{verify}(y_i)\!=\!y^*]} \;-\; \text{baseline} \]</div>
+      <div class="why">Verifier replaces RM. <span class="hl-adv">Same advantage formula</span>, <span class="hl-reward">reward source swapped</span>.</div>
+    </div>
+  </div>
+
+  <div class="fragment card tight" data-fragment-index="3" style="font-size:.64em;margin-top:.2em;">
+    <strong>The unifying takeaway:</strong> GRPO + <span class="hl-reward">verifier reward</span> = RLVR.
+    Swap the reward source; keep the algorithm. <em>RLHF and RLVR are one story.</em>
+    (KL is often <em>removed</em> in long RLVR runs — verifiable domains resist over-optimization.)
+  </div>
+</section>
+
+<!-- ============================================================
+     SLIDE 3 — Why RL works now + inference-time scaling (merged)
+     ============================================================ -->
+<section>
+  <h2>Why <em>Now</em> — and the New Scaling Axis</h2>
+
+  <div class="grid2" style="margin-top:.4em;">
+    <div class="card tight fragment" data-fragment-index="1">
+      <h3 style="margin-top:0;">OpenAI o1 · DeepSeek R1</h3>
+      <p style="font-size:.76em;">First public models trained with large-scale RLVR (2025) —
+        the "thinking model" era. R1 (open weights, GRPO) reprioritized the entire industry.</p>
+    </div>
+    <div class="card tight fragment" data-fragment-index="2">
+      <h3 style="margin-top:0;">Why it works now</h3>
+      <p style="font-size:.76em;"><strong>Capability threshold:</strong> RLVR only lifts models that are already strong (~2024 base models cleared it).
+      <strong>Tooling matured:</strong> TRL, veRL, OpenRLHF tamed RL's brittleness.</p>
+    </div>
+  </div>
+
+  <!-- ── ANIMATED SCALING CURVE (slow draw on slide entry) ── -->
+  <svg id="scaling-curve" viewBox="0 0 700 220" xmlns="http://www.w3.org/2000/svg"
+       style="width:100%;max-width:680px;display:block;margin:.5em auto 0;">
+
+    <defs>
+      <marker id="ax-head" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+        <path d="M0,0 L0,7 L7,3.5 z" fill="#6B6A65"/>
+      </marker>
+    </defs>
+
+    <line x1="70" y1="185" x2="660" y2="185" stroke="#6B6A65" stroke-width="1.5" marker-end="url(#ax-head)"/>
+    <line x1="70" y1="185" x2="70"  y2="20"  stroke="#6B6A65" stroke-width="1.5" marker-end="url(#ax-head)"/>
+
+    <text x="660" y="200" text-anchor="end" font-size="13" class="lbl muted">test-time compute (longer traces · more rollouts N)</text>
+    <text x="22" y="105" text-anchor="middle" font-size="13" class="lbl muted" transform="rotate(-90,22,105)">accuracy</text>
+
+    <line x1="70" y1="152" x2="640" y2="152" stroke="#ADA89C" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="645" y="150" text-anchor="end" font-size="11" fill="#ADA89C">greedy (N=1)</text>
+
+    <path d="M70,152 C110,148 150,138 200,120 C240,105 280,90 330,78 C390,65 450,58 520,52 C570,48 620,46 640,45"
+      stroke="#2E7D46" stroke-width="3" fill="none"
+      stroke-dasharray="610" stroke-dashoffset="610">
+      <animate attributeName="stroke-dashoffset" from="610" to="0" dur="3s" begin="1.2s" fill="freeze"/>
+    </path>
+
+    <path d="M70,152 C110,148 150,138 200,120 C240,105 280,90 330,78 C390,65 450,58 520,52 C570,48 620,46 640,45 L640,185 L70,185 Z"
+      fill="#2E7D46" fill-opacity="0" stroke="none">
+      <animate attributeName="fill-opacity" from="0" to="0.08" dur="0.9s" begin="4.4s" fill="freeze"/>
+    </path>
+
+    <circle cx="70"  cy="152" r="5" fill="#2E7D46" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="1.2s" fill="freeze"/>
+    </circle>
+    <circle cx="200" cy="120" r="5" fill="#2E7D46" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="2.1s" fill="freeze"/>
+    </circle>
+    <circle cx="330" cy="78"  r="5" fill="#2E7D46" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="2.9s" fill="freeze"/>
+    </circle>
+    <circle cx="520" cy="52"  r="5" fill="#2E7D46" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="3.7s" fill="freeze"/>
+    </circle>
+    <circle cx="640" cy="45"  r="5" fill="#2E7D46" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="4.3s" fill="freeze"/>
+    </circle>
+
+    <text x="70"  y="200" text-anchor="middle" font-size="11" class="lbl muted">1</text>
+    <text x="200" y="200" text-anchor="middle" font-size="11" class="lbl muted">4</text>
+    <text x="330" y="200" text-anchor="middle" font-size="11" class="lbl muted">16</text>
+    <text x="520" y="200" text-anchor="middle" font-size="11" class="lbl muted">64</text>
+    <text x="640" y="200" text-anchor="middle" font-size="11" class="lbl muted">256</text>
+
+    <text x="480" y="42" text-anchor="middle" font-size="12" fill="#2E7D46" opacity="0">
+      majority vote / best-of-N
+      <animate attributeName="opacity" from="0" to="1" dur="0.7s" begin="4.8s" fill="freeze"/>
+    </text>
+  </svg>
+
+  <p class="fragment" data-fragment-index="3" style="font-size:.76em;color:var(--muted);margin-top:.3em;text-align:center;">
+    Two ways to spend test-time compute: <strong>deeper</strong> (longer reasoning chains) and
+    <strong>wider</strong> (N parallel rollouts + majority vote).
+    This <em>is</em> what RLVR training unlocks; regular RLHF models do not scale this way.
+  </p>
+</section>
+
+<!-- ============================================================
+     SLIDE 4 — Recap + the road ahead (condensed)
+     ============================================================ -->
+<section>
+  <h2>RLVR — Recap</h2>
+
+  <ul style="font-size:.82em;margin-top:.5em;">
+    <li class="fragment" data-fragment-index="1"><span class="hl-reward">RLVR</span> = GRPO with a <strong>verifier</strong> instead of a learned reward model — 0/1 signal for math &amp; code.</li>
+    <li class="fragment" data-fragment-index="2">Loop: <span class="hl-policy">policy</span> generates CoT → verifier scores → <span class="hl-adv">GRPO</span> update → repeat (hundreds of epochs).</li>
+    <li class="fragment" data-fragment-index="3">Works <em>now</em> because base models crossed a capability threshold (~2024) and tooling matured.</li>
+    <li class="fragment" data-fragment-index="4"><strong>Two scaling axes:</strong> RL training (more gradient steps) + inference scaling (longer traces, more rollouts).</li>
+    <li class="fragment" data-fragment-index="5"><strong>Same machinery</strong> as standard RLHF — only the reward source differs. <em>RLHF and RLVR are one story.</em></li>
+  </ul>
+
+  <div class="fragment callout" data-fragment-index="6" style="font-size:.74em;margin-top:.7em;">
+    Expanding beyond math/code — precise instruction following, multimodal, agentic tool use with execution feedback.
+    Open questions (difficulty filtering, curricula, KL-free long runs) → self-study.
+  </div>
+
+  <p class="fragment" data-fragment-index="7" style="font-size:.78em;color:var(--muted);margin-top:.6em;text-align:center;">
+    Next: what happens when you optimize a <em>proxy</em> too hard.
+  </p>
+</section>
+
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/math/math.min.js"></script>
+<script>
+Reveal.initialize({
+  hash:true, slideNumber:'c/t', transition:'slide', backgroundTransition:'fade',
+  width:1280, height:720, margin:0.04,
+  katex:{ delimiters:[
+    {left:'\\[',right:'\\]',display:true},
+    {left:'$',right:'$',display:false}],
+    trust:true, strict:false },
+  plugins:[ RevealMath.KaTeX ]
+});
+
+/* --- Replay auto-running SMIL when a slide is (re)entered --- */
+function restartSVGs(slide){
+  if(!slide) return;
+  slide.querySelectorAll('svg').forEach(function(s){
+    if(s.querySelector('animate,animateTransform,animateMotion')){
+      try { s.setCurrentTime(0); } catch(e) {}
+    }
+  });
+}
+Reveal.on('ready', function(e){ restartSVGs(e.currentSlide); });
+Reveal.on('slidechanged', function(e){ restartSVGs(e.currentSlide); });
+</script>
+
+<!--xnav--><style>
+.xnav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:8px;align-items:center;font-family:Inter,system-ui,sans-serif;}
+.xnav-b{background:#FFFFFF;border:1px solid #E2E0D9;color:#1A1A18;border-radius:8px;padding:3px 11px;font-size:13px;text-decoration:none;}
+.xnav-b:hover{background:#F1EFE8;}
+.xnav-b.dis{opacity:.35;pointer-events:none;}
+.xnav-home{background:transparent;border:none;color:#6B6A65;font-size:12px;text-decoration:none;padding:3px 6px;}
+.xnav-lbl{color:#6B6A65;font-size:12px;padding:0 6px;letter-spacing:.02em;}
+</style>
+<div class="xnav"><a class="xnav-b" href="section_07_dpo_bon.html">↑ prev</a><a class="xnav-home" href="../index.html">☰ index</a><span class="xnav-lbl">Reasoning &amp; RLVR</span><a class="xnav-b" href="section_09_overopt_eval.html">next ↓</a></div>
+<script>
+(function(){
+  var order=["section_00_motivation.html","section_01_recipe_map.html","section_04_sft.html","section_03_three_families.html","section_02_llm_rl_problem.html","section_05_reward_modeling.html","section_06_rl_ppo_grpo.html","section_07_dpo_bon.html","section_08_rlvr_reasoning.html","section_09_overopt_eval.html","section_10_wrap.html"];
+  var cur=location.pathname.split('/').pop();
+  var i=order.indexOf(cur);
+  function go(j){ if(j>=0 && j<order.length) location.href=order[j]; }
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); go(i+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); go(i-1); }
+  }, true);
+})();
+</script>
+<!--/xnav-->
+</body>
+</html>
