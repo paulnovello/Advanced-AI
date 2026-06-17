@@ -100,6 +100,7 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
             )
 
         ds = concatenate_datasets(splits)
+
         print(f"Concatenated {len(splits)} subsets → {len(ds)} samples")
 
         from data.dataset import CauldronDataset
@@ -281,7 +282,7 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         #           backpropagating, so gradients accumulate correctly across
         #           micro-steps.
         #
-        # TODO 4 — Call backward on the scaled loss to accumulate gradients.
+        # TODO 4 — Call backwardmodel on the scaled loss to accumulate gradients.
         #
         # TODO 5 — On update steps only (is_update_step):
         #           Clip gradients with torch.nn.utils.clip_grad_norm_ using
@@ -384,7 +385,7 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
                         indent=2,
                     )
 
-                if mmstar_acc > best_mmstar_acc:
+                if mmstar_acc > (best_mmstar_acc + 0.5):
                     best_mmstar_acc = mmstar_acc
                     ckpt = os.path.join(
                         train_cfg.checkpoint_dir,
