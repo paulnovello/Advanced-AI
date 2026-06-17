@@ -174,9 +174,13 @@ class VisionLanguageModel(nn.Module):
             # TODO 6
             logits = self.decoder.head(hidden)
 
+            # logits[:, i] predicts targets[:, i+1] → drop last logit, drop first target
+            shift_logits = logits[:, :-1, :].contiguous()   # [B, T-1, V]
+            shift_targets = targets[:, 1:].contiguous()      # [B, T-1]
+
             loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                targets.view(-1),
+                shift_logits.view(-1, logits.size(-1)),
+                shift_targets.view(-1),
                 ignore_index=-100
             )
 

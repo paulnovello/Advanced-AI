@@ -256,6 +256,13 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
             batch['attention_mask'],
             batch['labels'],
         )
+
+        """print(input_ids.shape, labels.shape)
+        for i, element in enumerate(input_ids[0]):
+            print(i, element, labels[0, i])
+        # Set labels to random intergers to see if prediction are random
+        labels = torch.randint_like(labels, 0, 4)""" # debugging tools
+
         input_ids = input_ids.to(device)
         pixel_values = pixel_values.to(device)
         attention_mask = attention_mask.to(device)
