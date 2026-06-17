@@ -197,8 +197,6 @@ class VisionLanguageModel(nn.Module):
             shift_targets = targets[..., 1:].contiguous()
             
             loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                targets.view(-1),
                 shift_logits.view(-1, shift_logits.size(-1)),
                 shift_targets.view(-1),
                 ignore_index=-100,
@@ -298,5 +296,5 @@ class VisionLanguageModel(nn.Module):
         with open(config_path) as f:
             cfg = VLMConfig.from_dict(json.load(f))
         model = cls(cfg, load_backbone=False)
-        load_model(model, weights_path)
+        load_model(model, weights_path, strict=False)
         return model
