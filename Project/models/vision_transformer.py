@@ -105,7 +105,8 @@ class ViTAttention(nn.Module):
         self.out_proj = nn.Linear(self.hidden_dim, self.hidden_dim, bias=True)          # Linear: hidden_dim → hidden_dim (bias=True)
         self.attn_dropout = nn.Dropout(self.dropout)  # Dropout on attention weights
         self.resid_dropout = nn.Dropout(self.dropout)    # Dropout on the output projection
-        self.sdpa = False        # True if F.scaled_dot_product_attention is available
+        #self.sdpa = False        # True if F.scaled_dot_product_attention is available
+        self.sdpa = hasattr(F, "scaled_dot_product_attention")
 
     def forward(self, x):
         """

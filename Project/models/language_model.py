@@ -222,8 +222,6 @@ class LMAttention(nn.Module):
         self.resid_dropout = nn.Dropout(self.dropout)               # Dropout on the output
         self.sdpa = hasattr(F, "scaled_dot_product_attention")      # True if F.scaled_dot_product_attention is available
 
-        # raise NotImplementedError
-
     def forward(self, x, cos, sin, attention_mask=None, block_kv_cache=None):
         """
         Args:

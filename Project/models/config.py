@@ -182,7 +182,7 @@ class TrainConfig:
     lr_lm: float = 5e-5
 
     # Number of samples per forward pass (micro-batch); limited by GPU memory
-    batch_size: int = 2
+    batch_size: int = 16
 
     # Number of micro-batches accumulated before one optimizer.step();
     # effective batch size = batch_size × gradient_accumulation_steps = 16
@@ -198,10 +198,12 @@ class TrainConfig:
 
     # Run the validation loop every eval_interval optimizer steps;
     # computes average val loss and saves checkpoint if improved
-    eval_interval: int = 500
+    #eval_interval: int = 500
+    eval_interval: int = 1000
 
     # Print training loss to stdout every log_interval optimizer steps
-    log_interval: int = 50
+    #log_interval: int = 50
+    log_interval: int = 250
 
     # Fraction of max_steps used for linear LR warmup (0 → max_lr);
     # after warmup, LR decays via cosine schedule to max_lr/10
@@ -248,7 +250,7 @@ class TrainConfig:
     mmstar_eval_limit: int = 128
     mmstar_output_dir: str = 'eval_results'
 
-    checkpoint_dir: str = 'checkpoints'
+    checkpoint_dir: str = '/work/formation/tpirtmntll/checkpoints'
 
     # Whether to apply torch.compile() to the model for potential speedup
     compile: bool = False

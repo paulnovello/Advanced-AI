@@ -55,8 +55,35 @@ def get_lr(step: int, max_lr: float, max_steps: int) -> float:
     )
 
 
+# =========================================
+# We want to shuffle the dataset.
+# We work with the index because
+#   - Dataset is big
+#   - We can skip the steps already done in the precedent jobs
+
+# Vibe coded
+from torch.utils.data import Sampler
+
+class ResumableRandomSampler(Sampler):
+    """Same permutation every time (seeded), but can start partway through."""
+    def __init__(self, data_source, seed, start_index=0):
+        self.data_source = data_source
+        self.seed = seed
+        self.start_index = start_index
+
+    def __iter__(self):
+        g = torch.Generator()
+        g.manual_seed(self.seed)
+        full_perm = torch.randperm(len(self.data_source), generator=g).tolist()
+        return iter(full_perm[self.start_index:])
+
+    def __len__(self):
+        return len(self.data_source) - self.start_index
+
+
+
 # ── Data loading (PROVIDED) ───────────────────────────────────────────────────
-def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
+def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig, samples_consumed: int):
     from datasets import load_from_disk, concatenate_datasets
 
     if not train_cfg.dataset_local_path:
@@ -125,12 +152,16 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
 
     collator = VQACollator(tokenizer, max_length=train_cfg.max_length)
 
+    # Sampler : shuffle and start again at the correct sample
+    shuffle_seed = 42 # Do not change (jobs have to use the same permutation)
+    sampler = ResumableRandomSampler(train_dataset, seed=shuffle_seed, start_index=samples_consumed)
     train_loader = DataLoader(
         train_dataset,
         batch_size=train_cfg.batch_size,
         collate_fn=collator,
-        num_workers=2,
+        num_workers=1,
         pin_memory=True,
+        sampler=sampler
     )
     val_loader = DataLoader(
         val_dataset,
@@ -140,6 +171,48 @@ def get_dataloaders(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
         pin_memory=True,
     )
     return train_loader, val_loader
+
+
+# ========================================
+# checkpoints helpers (vibe coded)
+
+import shutil
+
+def _unwrap(model):
+    # torch.compile wraps the model in OptimizedModule
+    return model._orig_mod if hasattr(model, "_orig_mod") else model
+
+def save_checkpoint(path, model, global_step, best_val_loss, best_mmstar_acc, optimizer=None):
+    """Write atomically: build in a tmp dir, then swap in, so a job killed
+    mid-save can never leave a corrupted checkpoint behind."""
+    tmp = path + "_tmp"
+    if os.path.isdir(tmp):
+        shutil.rmtree(tmp)
+    _unwrap(model).save_pretrained(tmp)
+    if optimizer is not None:
+        torch.save(
+            {
+                "optimizer": optimizer.state_dict(),
+                "global_step": global_step,
+                "best_val_loss": best_val_loss,
+                "best_mmstar_acc": best_mmstar_acc,
+            },
+            os.path.join(tmp, "training_state.pt"),
+        )
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    os.replace(tmp, path)  # atomic on the same filesystem
+
+def find_resume_state(checkpoint_dir, device):
+    last_dir = os.path.join(checkpoint_dir, "last")
+    state_path = os.path.join(last_dir, "training_state.pt")
+    if os.path.isdir(last_dir) and os.path.isfile(state_path):
+        return last_dir, torch.load(state_path, map_location=device)
+    return None, None
+
+#=========================================
+
+
 
 
 # ── Main training function ────────────────────────────────────────────────────
@@ -155,12 +228,21 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
     print(f"Using device: {device}")
 
     # ── Model ─────────────────────────────────────────────────────────────────
-    model = VisionLanguageModel(
-        vlm_cfg, load_backbone=vlm_cfg.load_backbone_weights
-    )
+    # ======================= Vibe coded checkpoints
+    os.makedirs(train_cfg.checkpoint_dir, exist_ok=True)
+    resume_dir, resume_state = find_resume_state(train_cfg.checkpoint_dir, device)
+
+    if resume_dir:
+        print(f"Resuming from {resume_dir} (step {resume_state['global_step']})")
+        model = VisionLanguageModel.from_pretrained(resume_dir)
+    else:
+        print("No checkpoint found — starting from scratch.")
+        model = VisionLanguageModel(vlm_cfg, load_backbone=vlm_cfg.load_backbone_weights)
     model.to(device)
     if train_cfg.compile:
         model = torch.compile(model)
+    # ===================================================
+
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model: {n_params:,} parameters")
 
@@ -190,15 +272,20 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
     max_lrs = [  # noqa: F841
         train_cfg.lr_mp, train_cfg.lr_vit, train_cfg.lr_lm
     ]
+    # =========================== Vibe code checkpoints
     optimizer = optim.AdamW(param_groups)
-    # all_params: flat list of parameters for gradient clipping.
-    # Students reference this in TODO 5.
-    all_params = [  # noqa: F841
-        p for g in optimizer.param_groups for p in g["params"]
-    ]
+    all_params = [p for g in optimizer.param_groups for p in g["params"]]
+    if resume_state:
+        optimizer.load_state_dict(resume_state["optimizer"])
+
+    global_step = resume_state["global_step"] if resume_state else 0
+    best_val_loss = resume_state["best_val_loss"] if resume_state else float("inf")
+    best_mmstar_acc = resume_state["best_mmstar_acc"] if resume_state else -1.0
+    samples_consumed = resume_state["samples_consumed"] if resume_state else 0
+    # ==================================================
 
     # ── Data ──────────────────────────────────────────────────────────────────
-    train_loader, val_loader = get_dataloaders(train_cfg, vlm_cfg)
+    train_loader, val_loader = get_dataloaders(train_cfg, vlm_cfg, samples_consumed)
     iter_train = iter(train_loader)
 
     # ── AMP context ───────────────────────────────────────────────────────────
@@ -213,9 +300,6 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
     os.makedirs(train_cfg.checkpoint_dir, exist_ok=True)
 
     # ── Training state ────────────────────────────────────────────────────────
-    global_step = 0
-    best_val_loss = float("inf")
-    best_mmstar_acc = -1.0
     batch_loss = 0.0   # set by the student section each micro-step
     optimizer.zero_grad()
 
@@ -238,8 +322,11 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
             try:
                 batch = next(iter_train)
             except StopIteration:
-                iter_train = iter(train_loader)
-                batch = next(iter_train)
+                #iter_train = iter(train_loader)
+                #batch = next(iter_train)
+                # For practical reason, we will only do 1 epoch (no time remaining + simpler to handle dataloader logic)
+                print(f"Epoch complete after {samples_consumed} samples — stopping.")
+                break
 
         is_update_step = (
             (accum_step + 1) % train_cfg.gradient_accumulation_steps == 0
@@ -256,6 +343,8 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
             batch['attention_mask'],
             batch['labels'],
         )
+
+        samples_consumed += input_ids.size(0) # keep track for restarting at the good sample
 
         """print(input_ids.shape, labels.shape)
         for i, element in enumerate(input_ids[0]):
@@ -334,20 +423,25 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
                 if vloss is not None:
                     val_losses.append(vloss.item())
 
-            avg_val = (
-                sum(val_losses) / len(val_losses)
-                if val_losses else float("nan")
-            )
+            # ====================== checkpoints
+            avg_val = sum(val_losses) / len(val_losses) if val_losses else float("nan")
             print(f"step {global_step:5d} | val_loss {avg_val:.4e}")
 
-            if avg_val < best_val_loss:
+            is_new_best = avg_val < best_val_loss
+            if is_new_best:
                 best_val_loss = avg_val
-                ckpt = os.path.join(
-                    train_cfg.checkpoint_dir, f"best_step{global_step}"
-                )
-                model.save_pretrained(ckpt)
-                print(f"  → new best checkpoint saved to {ckpt}")
 
+            last_ckpt = os.path.join(train_cfg.checkpoint_dir, "last")
+            save_checkpoint(last_ckpt, model, global_step, best_val_loss, best_mmstar_acc, optimizer=optimizer)
+            print(f"  → saved last checkpoint to {last_ckpt}")
+
+            if is_new_best:
+                best_ckpt = os.path.join(train_cfg.checkpoint_dir, "best")
+                save_checkpoint(best_ckpt, model, global_step, best_val_loss, best_mmstar_acc)
+                print(f"  → new best checkpoint saved to {best_ckpt}")
+            # =====================================
+
+            # We don't use mmstar as validation because we use it in test
             if (
                 train_cfg.mmstar_val_path
                 and train_cfg.mmstar_eval_interval > 0
@@ -394,13 +488,10 @@ def train(train_cfg: TrainConfig, vlm_cfg: VLMConfig):
                     )
 
                 if mmstar_acc > best_mmstar_acc:
+                    # ==================== We don't want checkpoints from mmstar
                     best_mmstar_acc = mmstar_acc
-                    ckpt = os.path.join(
-                        train_cfg.checkpoint_dir,
-                        f"best_mmstar_step{global_step}",
-                    )
-                    model.save_pretrained(ckpt)
-                    print(f"  → new best MMStar checkpoint saved to {ckpt}")
+                    print(f"  → new best MMStar accuracy: {best_mmstar_acc:.4f} (recorded, no separate checkpoint)")
+                    # ===========================================================
 
             model.train()
 
