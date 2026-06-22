@@ -79,6 +79,3 @@ Load `dinov2_vits14` and explore its emergent properties:
 | MAE | ~60–70% | NB 3 |
 | **DINOv2** | **~97–98%** | NB 3 |
 
-## Please take the time to give feedback!
-
-Please fill out the [feedback form](https://docs.google.com/forms/d/e/1FAIpQLSd4qRiPho43N8hZEpKEBhLpUe0W-wOoYNQRZj24-elrwj3esA/viewform?usp=publish-editor) to help us improve future practical sessions!

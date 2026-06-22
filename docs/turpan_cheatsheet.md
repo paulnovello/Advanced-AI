@@ -25,6 +25,7 @@ ssh turpan
 To update your forked repo with the latest changes from this original repo, run:
 
 ```bash
+git remote add upstream https://github.com/paulnovello/Advanced-AI.git
 git fetch upstream
 git merge upstream/main
 ```

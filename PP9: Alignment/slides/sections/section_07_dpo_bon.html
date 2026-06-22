@@ -1,0 +1,846 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direct Alignment (DPO) &amp; Rejection Sampling — Preference Alignment</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+/* ---- section-local styles (do not redefine theme vars) ---- */
+.fig-caption { font-size:.56em; color:var(--muted); text-align:center; margin-top:.25em; }
+.deriv-sm .line { font-size:.9em; }
+.deriv.compact .line { padding:.3em .5em; }
+#rs-svg #fan1,#rs-svg #fan2,#rs-svg #fan3,#rs-svg #fan4,#rs-svg #keep-arrow{transition:stroke-dashoffset .85s ease;}
+.bar-label { font-size:13px; font-family:Inter,system-ui,sans-serif; fill:var(--fg); }
+.bar-sub   { font-size:11px; font-family:Inter,system-ui,sans-serif; fill:var(--muted); }
+</style>
+</head><body>
+<div class="reveal"><div class="slides">
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+     ══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>
+    Direct Alignment (DPO) &amp; Rejection Sampling
+  </h2>
+  <p class="fragment" data-fragment-index="1" style="font-size:.82em;color:var(--muted)">
+    <em>Align language models from preferences — no reward model, no RL optimizer required.</em>
+  </p>
+  </section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 2 — THE IDEA: SKIP THE EXPLICIT REWARD MODEL
+     ══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>The Key Insight: Skip the Reward Model</h2>
+
+  <div class="fragment" data-fragment-index="1">
+    <h3>Classic RL path (Sections 5–7)</h3>
+    <div class="pipe" style="margin:.4em 0;">
+      <span class="box sft">Preferences</span>
+      <span class="arrow">→</span>
+      <span class="box rm"><span style="color:var(--c-reward)">Train RM</span></span>
+      <span class="arrow">→</span>
+      <span class="box rl">PPO / GRPO</span>
+      <span class="arrow">→</span>
+      <span class="box rl" style="border-color:var(--c-policy)"><span class="hl-policy">π<sub>θ</sub></span></span>
+    </div>
+    <p style="font-size:.76em;color:var(--muted)">Two-stage, expensive, needs on-policy rollouts.</p>
+  </div>
+
+  <div class="fragment" data-fragment-index="2" style="margin-top:.7em;">
+    <h3>Direct Alignment path</h3>
+    <div class="pipe" style="margin:.4em 0;">
+      <span class="box sft">Preferences</span>
+      <span class="arrow">→</span>
+      <span class="box dpo"><span style="color:var(--c-pref)">DPO loss</span></span>
+      <span class="arrow">→</span>
+      <span class="box rl" style="border-color:var(--c-policy)"><span class="hl-policy">π<sub>θ</sub></span></span>
+    </div>
+    <p style="font-size:.76em;color:var(--muted)">One stage — reward is <em>implicit</em> in the policy log-ratio.</p>
+  </div>
+
+  <div class="fragment card" data-fragment-index="3" style="margin-top:.7em;font-size:.85em;">
+    <strong>Core claim:</strong> The optimal policy <span class="hl-policy">π*</span> under the
+    KL-constrained RLHF objective has a <em>closed form</em>. We can reparameterise the
+    <span class="hl-reward">reward</span> in terms of
+    <span class="hl-policy">π<sub>θ</sub></span> / <span style="color:var(--c-ref);font-weight:600">π<sub>ref</sub></span>
+    — bypassing an explicit reward model entirely.
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 3a — DPO DERIVATION (1/3): the optimal policy
+     ══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>DPO Derivation (1/3): The Optimal Policy</h2>
+  <p style="font-size:.7em;color:var(--muted);margin:.1em 0 .35em;">
+    The whole method hinges on one fact: the KL-constrained objective has a <em>closed-form</em> optimum.
+    <span class="hl-policy">Blue</span> = policy · <span style="color:var(--c-ref);font-weight:600">cyan</span> = ref ·
+    <span class="hl-reward">orange</span> = reward · <span class="hl-kl">purple</span> = β / Z / KL.
+  </p>
+
+  <div class="deriv compact" style="font-size:.64em;">
+
+    <div class="line fragment" data-fragment-index="1">
+      <div class="eq">\[\max_{\htmlClass{k-policy}{\pi}}\;
+        \mathbb{E}_{y\sim\htmlClass{k-policy}{\pi}}\!\bigl[\htmlClass{k-reward}{r(x,y)}\bigr]
+        -\htmlClass{k-kl}{\beta}\,D_\mathrm{KL}\!\bigl(\htmlClass{k-policy}{\pi}\,\|\,\htmlClass{k-ref}{\pi_\mathrm{ref}}\bigr)\]</div>
+      <div class="why">The KL-constrained RLHF objective: earn <span class="hl-reward">reward</span>, stay near <span style="color:var(--c-ref)">π<sub>ref</sub></span>.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="2">
+      <div class="eq">\[=\;\min_{\htmlClass{k-policy}{\pi}}\;
+        \mathbb{E}_{y\sim\htmlClass{k-policy}{\pi}}\!\left[\log\frac{\htmlClass{k-policy}{\pi(y|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(y|x)}}
+        -\tfrac{1}{\htmlClass{k-kl}{\beta}}\,\htmlClass{k-reward}{r(x,y)}\right]\]</div>
+      <div class="why">Write $D_\mathrm{KL}=\mathbb{E}\bigl[\log\tfrac{\pi}{\pi_\mathrm{ref}}\bigr]$, divide by $-\htmlClass{k-kl}{\beta}$, and flip max → min.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="3">
+      <div class="eq">\[=\;\min_{\htmlClass{k-policy}{\pi}}\;
+        \mathbb{E}_{y\sim\htmlClass{k-policy}{\pi}}\!\left[\log\frac{\htmlClass{k-policy}{\pi(y|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(y|x)}\,e^{\htmlClass{k-reward}{r(x,y)}/\htmlClass{k-kl}{\beta}}}\right]\]</div>
+      <div class="why">First fold the reward into the log: $-\tfrac{1}{\htmlClass{k-kl}{\beta}}\htmlClass{k-reward}{r}=-\log e^{\htmlClass{k-reward}{r}/\htmlClass{k-kl}{\beta}}$, so the denominator becomes $\htmlClass{k-ref}{\pi_\mathrm{ref}}\,e^{\htmlClass{k-reward}{r}/\htmlClass{k-kl}{\beta}}$ — not yet a normalized distribution.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="4">
+      <div class="eq">\[=\;\min_{\htmlClass{k-policy}{\pi}}\;
+        \mathbb{E}_{y\sim\htmlClass{k-policy}{\pi}}\!\left[\log\frac{\htmlClass{k-policy}{\pi(y|x)}}{\htmlClass{k-kl}{Z(x)}^{-1}\,\htmlClass{k-ref}{\pi_\mathrm{ref}(y|x)}\,e^{\htmlClass{k-reward}{r(x,y)}/\htmlClass{k-kl}{\beta}}}\right]-\log \htmlClass{k-kl}{Z(x)}\]</div>
+      <div class="why">Now multiply &amp; divide the denominator by $\htmlClass{k-kl}{Z(x)}=\sum_y \htmlClass{k-ref}{\pi_\mathrm{ref}}\,e^{\htmlClass{k-reward}{r}/\htmlClass{k-kl}{\beta}}$ — the denominator is now a valid distribution $\htmlClass{k-policy}{\pi^*}$, so the bracket is exactly $D_\mathrm{KL}(\htmlClass{k-policy}{\pi}\,\|\,\htmlClass{k-policy}{\pi^*})$; the leftover $-\log \htmlClass{k-kl}{Z}$ is independent of <span class="hl-policy">π</span>.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="5">
+      <div class="eq"><div class="eqresult">\[\htmlClass{k-policy}{\pi^*(y|x)}=\frac{1}{\htmlClass{k-kl}{Z(x)}}\,\htmlClass{k-ref}{\pi_\mathrm{ref}(y|x)}\,\exp\!\Bigl(\tfrac{1}{\htmlClass{k-kl}{\beta}}\htmlClass{k-reward}{r(x,y)}\Bigr)\]</div></div>
+      <div class="why">$D_\mathrm{KL}\ge 0$, zero <strong>iff</strong> <span class="hl-policy">π</span> equals that denominator — so it <em>is</em> the optimum. Re-weights <span style="color:var(--c-ref)">π<sub>ref</sub></span> by $e^{\htmlClass{k-reward}{r}/\htmlClass{k-kl}{\beta}}$: higher reward ⇒ exponentially more mass.</div>
+    </div>
+
+  </div><!-- /.deriv -->
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 3b — DPO DERIVATION (2/3): reward from the policy
+     ══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>DPO Derivation (2/3): Reward in Terms of the Policy</h2>
+  <p style="font-size:.72em;color:var(--muted);margin:.1em 0 .5em;">
+    Invert that formula — solve for the <span class="hl-reward">reward</span> instead of the policy.
+  </p>
+
+  <div class="deriv" style="font-size:.84em;">
+
+    <div class="line fragment" data-fragment-index="1">
+      <div class="eq">\[\htmlClass{k-policy}{\pi^*(y|x)}=\frac{1}{\htmlClass{k-kl}{Z(x)}}\,\htmlClass{k-ref}{\pi_\mathrm{ref}(y|x)}\,\exp\!\Bigl(\tfrac{1}{\htmlClass{k-kl}{\beta}}\htmlClass{k-reward}{r(x,y)}\Bigr)\]</div>
+      <div class="why">The closed form from the previous slide.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="2">
+      <div class="eq">\[\log\htmlClass{k-policy}{\pi^*}=\log\htmlClass{k-ref}{\pi_\mathrm{ref}}+\tfrac{1}{\htmlClass{k-kl}{\beta}}\htmlClass{k-reward}{r(x,y)}-\log \htmlClass{k-kl}{Z(x)}\]</div>
+      <div class="why">Take logs — the product becomes a sum.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="3">
+      <div class="eq"><div class="eqresult">\[\htmlClass{k-reward}{r(x,y)}=\htmlClass{k-kl}{\beta}\log\frac{\htmlClass{k-policy}{\pi^*(y|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(y|x)}}+\htmlClass{k-kl}{\beta}\log \htmlClass{k-kl}{Z(x)}\]</div></div>
+      <div class="why">Rearrange for <span class="hl-reward">r</span>: the reward is now an <em>implicit</em> function of the policy. $\htmlClass{k-kl}{\beta\log Z(x)}$ is an intractable per-prompt constant — but it is about to cancel.</div>
+    </div>
+
+  </div><!-- /.deriv -->
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 3c — DPO DERIVATION (3/3): into Bradley–Terry → the loss
+     ══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>DPO Derivation (3/3): Into Bradley–Terry → the Loss</h2>
+  <p style="font-size:.72em;color:var(--muted);margin:.1em 0 .5em;">
+    Bradley–Terry needs only the reward <em>difference</em> — so the intractable $\htmlClass{k-kl}{Z(x)}$ disappears.
+  </p>
+
+  <div class="deriv" style="font-size:.74em;">
+
+    <div class="line fragment" data-fragment-index="1">
+      <div class="eq">\[P(\htmlClass{k-pref}{y_w}\succ \htmlClass{k-pref}{y_l}\mid x)=\sigma\!\bigl(\htmlClass{k-reward}{r(x,\htmlClass{k-pref}{y_w})}-\htmlClass{k-reward}{r(x,\htmlClass{k-pref}{y_l})}\bigr)\]</div>
+      <div class="why">Bradley–Terry (from reward modeling): the preference probability depends only on the reward <em>difference</em>.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="2">
+      <div class="eq">\[\htmlClass{k-reward}{r(x,\htmlClass{k-pref}{y_w})}-\htmlClass{k-reward}{r(x,\htmlClass{k-pref}{y_l})}=\htmlClass{k-kl}{\beta}\log\frac{\htmlClass{k-policy}{\pi(\htmlClass{k-pref}{y_w}|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(\htmlClass{k-pref}{y_w}|x)}}-\htmlClass{k-kl}{\beta}\log\frac{\htmlClass{k-policy}{\pi(\htmlClass{k-pref}{y_l}|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(\htmlClass{k-pref}{y_l}|x)}}\]</div>
+      <div class="why">Substitute $\htmlClass{k-reward}{r}=\htmlClass{k-kl}{\beta}\log\tfrac{\pi}{\pi_\mathrm{ref}}+\htmlClass{k-kl}{\beta\log Z(x)}$. Same prompt ⇒ the $\htmlClass{k-kl}{\beta\log Z(x)}$ terms are identical and <strong>cancel</strong>.</div>
+    </div>
+
+    <div class="line fragment" data-fragment-index="3">
+      <div class="eq"><div class="eqresult">\[\mathcal{L}_\mathrm{DPO}=-\,\mathbb{E}_{(x,\htmlClass{k-pref}{y_w},\htmlClass{k-pref}{y_l})\sim\mathcal{D}}\!\left[\log\sigma\!\left(\htmlClass{k-kl}{\beta}\log\frac{\htmlClass{k-policy}{\pi_\theta(\htmlClass{k-pref}{y_w}|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(\htmlClass{k-pref}{y_w}|x)}}-\htmlClass{k-kl}{\beta}\log\frac{\htmlClass{k-policy}{\pi_\theta(\htmlClass{k-pref}{y_l}|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(\htmlClass{k-pref}{y_l}|x)}}\right)\right]\]</div></div>
+      <div class="why">Maximize the likelihood of observed preferences → minimize this NLL. Replace <span class="hl-policy">π*</span> with the trainable <span class="hl-policy">π<sub>θ</sub></span>. <strong>No reward model, no Z(x).</strong></div>
+    </div>
+
+  </div><!-- /.deriv -->
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 4 — DPO GRADIENT INTUITION + ANIMATED SVG FIGURE (a)
+     ══════════════════════════════════════════════════════════════ -->
+<section id="slide-dpo-gradient">
+  <h2>DPO Gradient: Push Up Chosen, Push Down Rejected</h2>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start;">
+
+    <!-- LEFT: gradient equation + bullets -->
+    <div>
+      <div class="card tight fragment" data-fragment-index="1" style="font-size:.8em;">
+        \[\nabla_\theta\mathcal{L}_\mathrm{DPO} =
+          -\htmlClass{k-kl}{\beta}\,\mathbb{E}\!\left[
+            \underbrace{\sigma\!\left(\htmlClass{k-reward}{\hat r_\theta(x,y_l)}-\htmlClass{k-reward}{\hat r_\theta(x,y_w)}\right)}_{\text{mismatch weight }w}
+            \!\cdot\!
+            \bigl[\nabla_\theta\log\htmlClass{k-policy}{\pi_\theta(y_w|x)} - \nabla_\theta\log\htmlClass{k-policy}{\pi_\theta(y_l|x)}\bigr]
+          \right]
+        \]
+      </div>
+      <ul style="font-size:.8em;margin-top:.6em;">
+        <li class="fragment" data-fragment-index="2">
+          Inner bracket: <span class="hl-policy">increase</span> log-prob of
+          <span style="color:var(--c-pref);font-weight:600">y<sub>w</sub></span>,
+          <span class="hl-policy">decrease</span> log-prob of
+          <span style="color:var(--c-pref);font-weight:600">y<sub>l</sub></span>.
+        </li>
+        <li class="fragment" data-fragment-index="3">
+          Weight <em>w</em> is large when the <span class="hl-reward">implicit reward</span> is wrong
+          — harder mistakes get bigger updates.
+        </li>
+        <li class="fragment" data-fragment-index="4">
+          Implicit reward: $\htmlClass{k-reward}{\hat r_\theta(x,y)} = \htmlClass{k-kl}{\beta}\log\dfrac{\htmlClass{k-policy}{\pi_\theta(y|x)}}{\htmlClass{k-ref}{\pi_\mathrm{ref}(y|x)}}$
+        </li>
+      </ul>
+    </div>
+
+    <!-- RIGHT: animated SVG — chosen/rejected bars -->
+    <div style="text-align:center;">
+      <svg id="bar-svg" viewBox="0 0 320 220" width="320" height="220"
+           xmlns="http://www.w3.org/2000/svg" style="max-width:100%;overflow:visible;">
+        <defs>
+          <marker id="ah-up" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M2,8 L4,1 L6,8 z" fill="#1D6FB8"/>
+          </marker>
+          <marker id="ah-dn" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M2,1 L4,8 L6,1 z" fill="#C2185B"/>
+          </marker>
+        </defs>
+
+        <!-- axis line -->
+        <line x1="40" y1="185" x2="290" y2="185" stroke="#E2E0D9" stroke-width="2"/>
+        <text x="155" y="202" text-anchor="middle" class="bar-sub">log-probability (relative to π_ref)</text>
+
+        <!-- chosen bar (y_w) — animates from 80px to 120px height -->
+        <rect id="bar-chosen" x="60" y="105" width="80" height="80"
+              rx="6" fill="var(--c-policy)" opacity="0.85">
+          <animate id="anim-chosen"
+                   attributeName="height" from="80" to="120"
+                   begin="indefinite" dur="0.98s" fill="freeze" calcMode="spline"
+                   keySplines="0.4 0 0.2 1"/>
+          <animate id="anim-chosen-y"
+                   attributeName="y" from="105" to="65"
+                   begin="indefinite" dur="0.98s" fill="freeze" calcMode="spline"
+                   keySplines="0.4 0 0.2 1"/>
+        </rect>
+        <text id="bar-chosen-lbl" x="100" y="99" text-anchor="middle" class="bar-label"
+              style="fill:var(--c-policy);">y<tspan baseline-shift="sub" font-size="10">w</tspan></text>
+        <text x="100" y="115" text-anchor="middle" class="bar-sub" style="fill:#fff;opacity:.7;">chosen</text>
+
+        <!-- rejected bar (y_l) — animates from 80px to 45px height -->
+        <rect id="bar-rejected" x="170" y="105" width="80" height="80"
+              rx="6" fill="var(--c-pref)" opacity="0.85">
+          <animate id="anim-rejected"
+                   attributeName="height" from="80" to="45"
+                   begin="indefinite" dur="0.98s" fill="freeze" calcMode="spline"
+                   keySplines="0.4 0 0.2 1"/>
+          <animate id="anim-rejected-y"
+                   attributeName="y" from="105" to="140"
+                   begin="indefinite" dur="0.98s" fill="freeze" calcMode="spline"
+                   keySplines="0.4 0 0.2 1"/>
+        </rect>
+        <text id="bar-rejected-lbl" x="210" y="99" text-anchor="middle" class="bar-label"
+              style="fill:var(--c-pref);">y<tspan baseline-shift="sub" font-size="10">l</tspan></text>
+        <text x="210" y="115" text-anchor="middle" class="bar-sub" style="fill:#fff;opacity:.7;">rejected</text>
+
+        <!-- arrows — hidden until animation fires -->
+        <line id="arrow-up" x1="100" y1="58" x2="100" y2="20"
+              stroke="var(--c-policy)" stroke-width="2.5" marker-end="url(#ah-up)"
+              opacity="0">
+          <animate id="anim-arrow-up" attributeName="opacity" from="0" to="1"
+                   begin="indefinite" dur="0.42s" fill="freeze"/>
+        </line>
+        <line id="arrow-dn" x1="210" y1="192" x2="210" y2="214"
+              stroke="var(--c-pref)" stroke-width="2.5" marker-end="url(#ah-dn)"
+              opacity="0">
+          <animate id="anim-arrow-dn" attributeName="opacity" from="0" to="1"
+                   begin="indefinite" dur="0.42s" fill="freeze"/>
+        </line>
+
+        <!-- "Before" / "After" labels -->
+        <text id="lbl-before" x="155" y="26" text-anchor="middle"
+              font-size="12" fill="var(--muted)" font-family="Inter,system-ui,sans-serif">Before update</text>
+        <text id="lbl-after" x="155" y="26" text-anchor="middle"
+              font-size="12" fill="var(--accent)" font-family="Inter,system-ui,sans-serif"
+              opacity="0">
+          After DPO step
+          <animate id="anim-after-lbl" attributeName="opacity" from="0" to="1"
+                   begin="indefinite" dur="0.56s" fill="freeze"/>
+        </text>
+      </svg>
+      <p class="fig-caption fragment" data-fragment-index="2">
+        Fig (a) — DPO gradient effect on log-probabilities relative to π<sub>ref</sub>.
+      </p>
+    </div>
+
+  </div><!-- /.grid2 -->
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 5 — DPO VS RL: ONLINE VS OFFLINE  (with animated SVG figure)
+     ══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>DPO vs. RL: Offline vs. Online Data</h2>
+
+  <!-- Animated SVG: two lanes -->
+  <div class="fragment" data-fragment-index="1" style="text-align:center;margin:.3em 0 .2em;">
+  <svg viewBox="0 0 900 200" width="900" height="200"
+       xmlns="http://www.w3.org/2000/svg" style="max-width:100%;overflow:visible;">
+    <defs>
+      <marker id="ah2" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#6B6A65"/>
+      </marker>
+      <marker id="ah2-p" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#1D6FB8"/>
+      </marker>
+      <marker id="ah2-r" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#B5730F"/>
+      </marker>
+      <marker id="ah2-g" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#2E7D46"/>
+      </marker>
+    </defs>
+
+    <!-- ─── LANE LABELS ─── -->
+    <text x="10" y="57" font-size="12" font-weight="700"
+          font-family="Inter,system-ui,sans-serif" fill="#C2185B">DPO (offline)</text>
+    <text x="10" y="147" font-size="12" font-weight="700"
+          font-family="Inter,system-ui,sans-serif" fill="#1D6FB8">RL (online)</text>
+
+    <!-- ─── OFFLINE LANE ─── -->
+    <!-- Dataset -->
+    <rect x="80" y="28" width="100" height="38" rx="8" fill="#FFFFFF" stroke="#C2185B" stroke-width="1.5"/>
+    <text x="130" y="50" text-anchor="middle" font-size="11"
+          font-family="Inter,system-ui,sans-serif" fill="#C2185B">Fixed 𝒟</text>
+    <!-- Arrow: dataset → DPO forward pass -->
+    <line x1="180" y1="47" x2="238" y2="47" stroke="#6B6A65" stroke-width="1.5" marker-end="url(#ah2)">
+      <animate attributeName="stroke-dashoffset" from="60" to="0" dur="0.7s" begin="0.34s" fill="freeze"/>
+    </line>
+    <!-- DPO loss -->
+    <rect x="240" y="28" width="110" height="38" rx="8" fill="#FFFFFF" stroke="#C2185B" stroke-width="1.5"/>
+    <text x="295" y="44" text-anchor="middle" font-size="11"
+          font-family="Inter,system-ui,sans-serif" fill="#C2185B">DPO loss</text>
+    <text x="295" y="59" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65">static β</text>
+    <!-- Arrow: loss → πθ -->
+    <line x1="350" y1="47" x2="408" y2="47" stroke="#6B6A65" stroke-width="1.5" marker-end="url(#ah2)">
+      <animate attributeName="stroke-dashoffset" from="60" to="0" dur="0.7s" begin="0.85s" fill="freeze"/>
+    </line>
+    <!-- πθ -->
+    <rect x="410" y="28" width="90" height="38" rx="8" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="1.5"/>
+    <text x="455" y="51" text-anchor="middle" font-size="12" font-weight="700"
+          font-family="Inter,system-ui,sans-serif" fill="#1D6FB8">π<tspan baseline-shift="sub" font-size="9">θ</tspan></text>
+    <!-- "done" label -->
+    <text x="525" y="51" font-size="10" font-family="Inter,system-ui,sans-serif" fill="#2E7D46">✓ offline, one pass</text>
+
+    <!-- ─── ONLINE LANE ─── -->
+    <!-- Prompt -->
+    <rect x="80" y="118" width="80" height="38" rx="8" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="1.5"/>
+    <text x="120" y="141" text-anchor="middle" font-size="11"
+          font-family="Inter,system-ui,sans-serif" fill="#1D6FB8">prompt x</text>
+    <!-- Arrow: prompt → generate -->
+    <line x1="160" y1="137" x2="218" y2="137" stroke="#6B6A65" stroke-width="1.5" marker-end="url(#ah2-p)">
+      <animate attributeName="stroke-dashoffset" from="60" to="0" dur="0.7s" begin="0.68s" fill="freeze"/>
+    </line>
+    <!-- Generate πθ -->
+    <rect x="220" y="118" width="90" height="38" rx="8" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="1.5"/>
+    <text x="265" y="135" text-anchor="middle" font-size="10"
+          font-family="Inter,system-ui,sans-serif" fill="#1D6FB8">generate y</text>
+    <text x="265" y="150" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65">∼ π<tspan baseline-shift="sub" font-size="7">θ</tspan></text>
+    <!-- Arrow: generate → RM score -->
+    <line x1="310" y1="137" x2="368" y2="137" stroke="#6B6A65" stroke-width="1.5" marker-end="url(#ah2-r)">
+      <animate attributeName="stroke-dashoffset" from="60" to="0" dur="0.7s" begin="1s" fill="freeze"/>
+    </line>
+    <!-- RM score -->
+    <rect x="370" y="118" width="90" height="38" rx="8" fill="#FFFFFF" stroke="#B5730F" stroke-width="1.5"/>
+    <text x="415" y="135" text-anchor="middle" font-size="10"
+          font-family="Inter,system-ui,sans-serif" fill="#B5730F">RM score</text>
+    <text x="415" y="150" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65">r(x, y)</text>
+    <!-- Arrow: score → gradient update -->
+    <line x1="460" y1="137" x2="518" y2="137" stroke="#6B6A65" stroke-width="1.5" marker-end="url(#ah2-g)">
+      <animate attributeName="stroke-dashoffset" from="60" to="0" dur="0.7s" begin="1.4s" fill="freeze"/>
+    </line>
+    <!-- grad update -->
+    <rect x="520" y="118" width="90" height="38" rx="8" fill="#FFFFFF" stroke="#2E7D46" stroke-width="1.5"/>
+    <text x="565" y="135" text-anchor="middle" font-size="10"
+          font-family="Inter,system-ui,sans-serif" fill="#2E7D46">∇θ update</text>
+    <text x="565" y="150" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65">dynamic KL</text>
+    <!-- loop-back arrow -->
+    <path d="M610,137 Q670,137 670,80 Q670,30 460,30 Q350,30 350,47"
+          fill="none" stroke="#2E7D46" stroke-width="1.5" stroke-dasharray="5 4"
+          marker-end="url(#ah2-g)">
+      <animate attributeName="stroke-dashoffset" from="200" to="0" dur="1.7s" begin="1.7s" fill="freeze"/>
+    </path>
+    <text x="680" y="85" font-size="9" font-family="Inter,system-ui,sans-serif" fill="#2E7D46">repeat</text>
+  </svg>
+  <p class="fig-caption" style="margin-top:.1em;">
+    Fig (c) — Offline DPO (top) vs. online RL loop (bottom). RL generates fresh data each batch; DPO trains on a fixed dataset.
+  </p>
+  </div><!-- /.fragment -->
+
+  <div class="grid2" style="margin-top:.4em;gap:14px;">
+    <div class="card fragment tight" data-fragment-index="2" style="font-size:.78em;">
+      <h3 style="color:var(--c-pref)">DPO (offline)</h3>
+      <ul>
+        <li class="fragment" data-fragment-index="3">Fixed 𝒟 — no rollout loop</li>
+        <li class="fragment" data-fragment-index="4">KL <strong>static</strong>: set exactly by β</li>
+        <li class="fragment" data-fragment-index="5">Easier to implement; 2× less GPU with log-prob caching</li>
+        <li class="fragment" data-fragment-index="6">Risk: training signal from <em>other</em> models → distribution mismatch</li>
+      </ul>
+    </div>
+    <div class="card fragment tight" data-fragment-index="2" style="font-size:.78em;">
+      <h3 style="color:var(--c-policy)">RL / PPO / GRPO (online)</h3>
+      <ul>
+        <li class="fragment" data-fragment-index="3">Fresh on-policy samples each batch</li>
+        <li class="fragment" data-fragment-index="4">KL tracked dynamically via penalty / clipping</li>
+        <li class="fragment" data-fragment-index="5">Higher ceiling — especially for reasoning</li>
+        <li class="fragment" data-fragment-index="6">More infrastructure: RM server, rollout workers</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="fragment card tight" data-fragment-index="7" style="font-size:.8em;margin-top:.5em;">
+    <strong>Verdict:</strong> RL methods edge ahead on benchmarks, but
+    <span class="hl-policy">DPO</span> dominates production
+    (Llama 3, Tülu 3, Nemotron …) — <strong>data quality dominates algorithmic choice</strong>.
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 6 — REJECTION SAMPLING / BEST-OF-N  (animated SVG figure b)
+     ══════════════════════════════════════════════════════════════ -->
+<section id="slide-rs">
+  <h2>Rejection Sampling &amp; Best-of-N</h2>
+  <p style="font-size:.76em;color:var(--muted);margin:.1em 0 .4em;">
+    Generate N completions per prompt → score with a reward model → keep the best → SFT.
+  </p>
+
+  <!-- ── Animated SVG: Best-of-N fan-out ── -->
+  <div style="text-align:center;margin:.2em 0;">
+  <svg id="rs-svg" viewBox="0 0 860 230" width="860" height="230"
+       xmlns="http://www.w3.org/2000/svg" style="max-width:100%;overflow:visible;">
+    <defs>
+      <marker id="ah3" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#6B6A65"/>
+      </marker>
+      <marker id="ah3-g" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#2E7D46"/>
+      </marker>
+      <marker id="ah3-r" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#B5730F"/>
+      </marker>
+    </defs>
+
+    <!-- ─── PROMPT NODE ─── -->
+    <rect x="20" y="90" width="90" height="50" rx="10" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2"/>
+    <text x="65" y="111" text-anchor="middle" font-size="12" font-weight="700"
+          font-family="Inter,system-ui,sans-serif" fill="#1D6FB8">Prompt x</text>
+    <text x="65" y="128" text-anchor="middle" font-size="10"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65">πθ generates</text>
+
+    <!-- ─── FAN-OUT LINES (appear via fragment 1) ─── -->
+    <!-- Line to y1 -->
+    <line id="fan1" x1="110" y1="115" x2="225" y2="35"
+          stroke="#6B6A65" stroke-width="1.5" stroke-dasharray="100" stroke-dashoffset="100"
+          marker-end="url(#ah3)"/>
+    <!-- Line to y2 -->
+    <line id="fan2" x1="110" y1="115" x2="225" y2="83"
+          stroke="#6B6A65" stroke-width="1.5" stroke-dasharray="120" stroke-dashoffset="120"
+          marker-end="url(#ah3)"/>
+    <!-- Line to y3 (best) -->
+    <line id="fan3" x1="110" y1="115" x2="225" y2="131"
+          stroke="#6B6A65" stroke-width="1.5" stroke-dasharray="120" stroke-dashoffset="120"
+          marker-end="url(#ah3)"/>
+    <!-- Line to y4 -->
+    <line id="fan4" x1="110" y1="115" x2="225" y2="179"
+          stroke="#6B6A65" stroke-width="1.5" stroke-dasharray="130" stroke-dashoffset="130"
+          marker-end="url(#ah3)"/>
+
+    <!-- ─── COMPLETION NODES ─── -->
+    <!-- y1 -->
+    <rect id="c1" x="228" y="15" width="100" height="38" rx="8"
+          fill="#FFFFFF" stroke="#E2E0D9" stroke-width="1.5" opacity="0"/>
+    <text id="c1t" x="278" y="38" text-anchor="middle" font-size="11"
+          font-family="Inter,system-ui,sans-serif" fill="#1A1A18" opacity="0">y₁</text>
+    <!-- y2 -->
+    <rect id="c2" x="228" y="63" width="100" height="38" rx="8"
+          fill="#FFFFFF" stroke="#E2E0D9" stroke-width="1.5" opacity="0"/>
+    <text id="c2t" x="278" y="86" text-anchor="middle" font-size="11"
+          font-family="Inter,system-ui,sans-serif" fill="#1A1A18" opacity="0">y₂</text>
+    <!-- y3 (best — gold outline after scoring) -->
+    <rect id="c3" x="228" y="111" width="100" height="38" rx="8"
+          fill="#FFFFFF" stroke="#E2E0D9" stroke-width="1.5" opacity="0"/>
+    <text id="c3t" x="278" y="134" text-anchor="middle" font-size="11"
+          font-family="Inter,system-ui,sans-serif" fill="#1A1A18" opacity="0">y₃</text>
+    <!-- y4 -->
+    <rect id="c4" x="228" y="159" width="100" height="38" rx="8"
+          fill="#FFFFFF" stroke="#E2E0D9" stroke-width="1.5" opacity="0"/>
+    <text id="c4t" x="278" y="182" text-anchor="middle" font-size="11"
+          font-family="Inter,system-ui,sans-serif" fill="#1A1A18" opacity="0">y₄</text>
+
+    <!-- ─── REWARD SCORES (appear via fragment 2) ─── -->
+    <text id="r1" x="344" y="38" font-size="11" font-family="Inter,system-ui,sans-serif"
+          fill="#B5730F" opacity="0">r=0.5</text>
+    <text id="r2" x="344" y="86" font-size="11" font-family="Inter,system-ui,sans-serif"
+          fill="#B5730F" opacity="0">r=0.4</text>
+    <text id="r3" x="344" y="134" font-size="13" font-weight="700"
+          font-family="Inter,system-ui,sans-serif"
+          fill="#B5730F" opacity="0">r=0.9 ★</text>
+    <text id="r4" x="344" y="182" font-size="11" font-family="Inter,system-ui,sans-serif"
+          fill="#B5730F" opacity="0">r=0.3</text>
+
+    <!-- ─── BEST NODE HIGHLIGHT (fragment 3: gold border + label) ─── -->
+    <rect id="c3-hl" x="226" y="109" width="104" height="42" rx="9"
+          fill="rgba(181,115,15,.12)" stroke="#B5730F" stroke-width="2.5" opacity="0"/>
+    <text id="best-lbl" x="278" y="105" text-anchor="middle" font-size="11" font-weight="700"
+          font-family="Inter,system-ui,sans-serif" fill="#B5730F" opacity="0">BEST</text>
+
+    <!-- ─── KEEP ARROW → SFT (fragment 3) ─── -->
+    <line id="keep-arrow" x1="332" y1="130" x2="440" y2="130"
+          stroke="#2E7D46" stroke-width="2" stroke-dasharray="110" stroke-dashoffset="110"
+          marker-end="url(#ah3-g)"/>
+    <!-- SFT node -->
+    <rect id="sft-node" x="442" y="109" width="100" height="42" rx="9"
+          fill="#FFFFFF" stroke="#2E7D46" stroke-width="2" opacity="0"/>
+    <text id="sft-t1" x="492" y="127" text-anchor="middle" font-size="11" font-weight="700"
+          font-family="Inter,system-ui,sans-serif" fill="#2E7D46" opacity="0">SFT fine-tune</text>
+    <text id="sft-t2" x="492" y="143" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65" opacity="0">on top completions</text>
+
+    <!-- ─── BEST-OF-N BRANCH: inference only (fragment 4) ─── -->
+    <text id="bon-lbl" x="560" y="72" font-size="10" font-weight="700"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65" opacity="0">Best-of-N (inference only)</text>
+    <line id="bon-arr" x1="332" y1="115" x2="555" y2="75"
+          stroke="#6B6A65" stroke-width="1.5" stroke-dasharray="5 4" stroke-dashoffset="0"
+          marker-end="url(#ah3)" opacity="0"/>
+    <rect id="bon-node" x="558" y="55" width="110" height="38" rx="8"
+          fill="#FFFFFF" stroke="#6B6A65" stroke-width="1.5" opacity="0"/>
+    <text id="bon-t1" x="613" y="72" text-anchor="middle" font-size="10" font-weight="600"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65" opacity="0">serve y_best</text>
+    <text id="bon-t2" x="613" y="86" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65" opacity="0">no model update</text>
+
+    <!-- ─── STEP LABELS ─── -->
+    <text x="65" y="175" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65">① generate N</text>
+    <text x="278" y="210" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#6B6A65">② N completions</text>
+    <text x="395" y="210" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#B5730F">③ score with RM</text>
+    <text x="492" y="162" text-anchor="middle" font-size="9"
+          font-family="Inter,system-ui,sans-serif" fill="#2E7D46">④ SFT on best</text>
+  </svg>
+  </div>
+
+  <div class="grid2" style="margin-top:.3em;gap:14px;font-size:.8em;">
+    <div class="fragment" data-fragment-index="1" style="display:none;"></div>
+    <div class="fragment" data-fragment-index="2" style="display:none;"></div>
+    <div class="fragment" data-fragment-index="3" style="display:none;"></div>
+    <div class="fragment" data-fragment-index="4" style="display:none;"></div>
+    <div class="card tight fragment" data-fragment-index="5">
+      <strong>Top per prompt</strong>&ensp;
+      $\hat{y}_i = \arg\max_j\; \htmlClass{k-reward}{r_{i,j}}$ —
+      one best completion per prompt; balanced coverage.
+    </div>
+    <div class="card tight fragment" data-fragment-index="6">
+      <strong>Top-K overall</strong> — take the K highest-reward pairs across all prompts;
+      maximises quality but may skew toward easy prompts.
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 8 — RECAP: THREE WAYS TO USE PREFERENCES
+     ══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Recap: Three Ways to Use Preferences</h2>
+
+  <div class="grid3" style="margin-top:.3em;font-size:.88em;">
+    <div class="card tight fragment" data-fragment-index="1">
+      <h3 style="color:var(--c-policy)">Reinforcement Learning</h3>
+      <p style="font-size:.78em;">Explicit <span class="hl-reward">reward model</span> → on-policy rollouts →
+        <span class="hl-policy">PPO / GRPO</span>.</p>
+      <p style="font-size:.72em;color:var(--muted)">Highest ceiling. Best for reasoning. Needs RM server + rollout workers.</p>
+    </div>
+    <div class="card tight fragment" data-fragment-index="2">
+      <h3 style="color:var(--c-pref)">DPO (Direct Alignment)</h3>
+      <p style="font-size:.78em;">Implicit reward
+        $\htmlClass{k-kl}{\beta}\log\frac{\htmlClass{k-policy}{\pi_\theta}}{\htmlClass{k-ref}{\pi_\mathrm{ref}}}$;
+        offline on fixed preference pairs.</p>
+      <p style="font-size:.72em;color:var(--muted)">Simple, no RM. Widely used: Llama 3 Instruct, Tülu 3, Zephyr-β.</p>
+    </div>
+    <div class="card tight fragment" data-fragment-index="3">
+      <h3 style="color:var(--c-adv)">Rejection Sampling</h3>
+      <p style="font-size:.78em;">Generate N → score with RM → SFT on top K.
+        Best-of-N skips fine-tuning (inference-only).</p>
+      <p style="font-size:.72em;color:var(--muted)">Fewest moving parts. Used in WebGPT, Llama 2 Chat, OpenAI PRM paper.</p>
+    </div>
+  </div>
+
+  <div class="fragment card tight" data-fragment-index="4" style="margin-top:.35em;text-align:center;font-size:.72em;">
+    All three minimise the <strong>same KL-constrained RLHF objective</strong>:
+    \[\max_\pi\;\mathbb{E}\!\left[\htmlClass{k-reward}{r(x,y)}\right] - \htmlClass{k-kl}{\beta\,D_\mathrm{KL}(\pi\|\pi_\mathrm{ref})}\]
+    They differ in how the reward is estimated and whether data is fixed or online.
+  </div>
+
+  <div class="fragment callout pref" data-fragment-index="5" style="font-size:.56em;margin:.15em 0;">
+    <strong>Variants in the wild</strong> — IPO (softer target), SimPO (length-norm), ORPO (no reference model),
+    online DPO (sample from the current policy). One caveat worth remembering:
+    <em>preference displacement</em> — DPO can lower <em>both</em> log-probs, the rejected one more. Details → self-study.
+  </div>
+
+  <div class="fragment" data-fragment-index="7"
+       style="text-align:center;margin-top:.25em;font-size:.62em;color:var(--muted);">
+    Next: the frontier — reasoning models and verifiable rewards (RLVR).
+  </div>
+</section>
+
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/math/math.min.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  slideNumber: 'c/t',
+  transition: 'slide',
+  backgroundTransition: 'fade',
+  width: 1280,
+  height: 720,
+  margin: 0.04,
+  katex: {
+    delimiters: [
+      { left: '\\[', right: '\\]', display: true },
+      { left: '$',  right: '$',  display: false }
+    ],
+    trust: true,
+    strict: false
+  },
+  plugins: [ RevealMath.KaTeX ]
+});
+
+/* --- Replay auto-running SMIL when a slide is (re)entered --- */
+(function(){
+  function restartSVGs(slide){
+    if(!slide) return;
+    slide.querySelectorAll('svg').forEach(function(s){
+      if(s.querySelector('animate,animateTransform,animateMotion')){
+        try { s.setCurrentTime(0); } catch(e) {}
+      }
+    });
+  }
+  Reveal.on('ready', function(e){ restartSVGs(e.currentSlide); });
+  Reveal.on('slidechanged', function(e){ restartSVGs(e.currentSlide); });
+})();
+
+/* ── Section-scoped fragment listeners ─────────────────────────────────────
+   Slide indices in THIS file (0-based, matching the physical <section> order):
+     0 = title
+     1 = key insight
+     2 = derivation chain
+     3 = gradient intuition  ← bar animation
+     4 = online vs offline
+     5 = rejection sampling  ← fan-out animation
+     6 = DPO variants
+     7 = recap
+   We guard every listener with element-existence checks.
+──────────────────────────────────────────────────────────────────────────── */
+
+/* ── FIGURE (a): DPO gradient bars ── */
+(function () {
+  var animFired = false;
+
+  function fireBarAnim () {
+    if (animFired) return;
+    var svg = document.getElementById('bar-svg');
+    if (!svg) return;
+    animFired = true;
+
+    ['anim-chosen','anim-chosen-y'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.beginElement();
+    });
+    ['anim-rejected','anim-rejected-y'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.beginElement();
+    });
+    setTimeout(function(){
+      ['anim-arrow-up','anim-arrow-dn','anim-after-lbl'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.beginElement();
+      });
+      var before = document.getElementById('lbl-before');
+      if (before) before.setAttribute('opacity','0');
+    }, 600);
+  }
+
+  function resetBarAnim () {
+    animFired = false;
+    /* reset chosen bar */
+    var bc = document.getElementById('bar-chosen');
+    if (bc) { bc.setAttribute('height','80'); bc.setAttribute('y','105'); }
+    var br = document.getElementById('bar-rejected');
+    if (br) { br.setAttribute('height','80'); br.setAttribute('y','105'); }
+    var au = document.getElementById('arrow-up');
+    if (au) au.setAttribute('opacity','0');
+    var ad = document.getElementById('arrow-dn');
+    if (ad) ad.setAttribute('opacity','0');
+    var al = document.getElementById('lbl-after');
+    if (al) al.setAttribute('opacity','0');
+    var bl = document.getElementById('lbl-before');
+    if (bl) bl.setAttribute('opacity','1');
+  }
+
+  Reveal.on('fragmentshown', function(e){
+    var slide = e.fragment.closest ? e.fragment.closest('section') : null;
+    if (!slide || slide.id !== 'slide-dpo-gradient') return;
+    if (e.fragment.getAttribute('data-fragment-index') === '2') {
+      fireBarAnim();
+    }
+  });
+
+  Reveal.on('fragmenthidden', function(e){
+    var slide = e.fragment.closest ? e.fragment.closest('section') : null;
+    if (!slide || slide.id !== 'slide-dpo-gradient') return;
+    if (e.fragment.getAttribute('data-fragment-index') === '2') {
+      resetBarAnim();
+    }
+  });
+}());
+
+/* ── FIGURE (b): Rejection sampling fan-out ── */
+(function () {
+  /* fan-out: fragment 1 = lines+nodes; fragment 2 = scores; fragment 3 = best+arrow+SFT; fragment 4 = BoN */
+  var stepFired = [false, false, false, false];
+
+  function showFanStep(step) {
+    if (stepFired[step]) return;
+    stepFired[step] = true;
+
+    if (step === 0) {
+      /* animate fan lines */
+      ['fan1','fan2','fan3','fan4'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.style.strokeDashoffset = '0';
+      });
+      /* show completion rects */
+      ['c1','c1t','c2','c2t','c3','c3t','c4','c4t'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.setAttribute('opacity','1');
+      });
+    }
+
+    if (step === 1) {
+      /* show reward scores */
+      ['r1','r2','r3','r4'].forEach(function(id, i){
+        setTimeout(function(){
+          var el = document.getElementById(id);
+          if (el) el.setAttribute('opacity','1');
+        }, i * 120);
+      });
+    }
+
+    if (step === 2) {
+      /* highlight best + draw keep arrow + show SFT */
+      ['c3-hl','best-lbl'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.setAttribute('opacity','1');
+      });
+      /* animate keep arrow */
+      var ka = document.getElementById('keep-arrow');
+      if (ka) ka.style.strokeDashoffset = '0';
+      setTimeout(function(){
+        ['sft-node','sft-t1','sft-t2'].forEach(function(id){
+          var el = document.getElementById(id);
+          if (el) el.setAttribute('opacity','1');
+        });
+      }, 500);
+    }
+
+    if (step === 3) {
+      ['bon-lbl','bon-arr','bon-node','bon-t1','bon-t2'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.setAttribute('opacity','1');
+      });
+    }
+  }
+
+  var rsFragToStep = {'1': 0, '2': 1, '3': 2, '4': 3};
+
+  Reveal.on('fragmentshown', function(e){
+    var slide = e.fragment.closest ? e.fragment.closest('section') : null;
+    if (!slide || slide.id !== 'slide-rs') return;
+    var idx = e.fragment.getAttribute('data-fragment-index');
+    if (idx in rsFragToStep) showFanStep(rsFragToStep[idx]);
+  });
+
+  /* reset on slide leave */
+  Reveal.on('slidechanged', function(e){
+    if (e.previousSlide && e.previousSlide.id === 'slide-rs') {
+      stepFired = [false, false, false, false];
+      ['fan1','fan2','fan3','fan4'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) {
+          var len = parseFloat(el.getAttribute('stroke-dasharray')) || 130;
+          el.style.strokeDashoffset = len;
+        }
+      });
+      ['c1','c1t','c2','c2t','c3','c3t','c4','c4t',
+       'r1','r2','r3','r4','c3-hl','best-lbl','sft-node','sft-t1','sft-t2',
+       'bon-lbl','bon-arr','bon-node','bon-t1','bon-t2'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.setAttribute('opacity','0');
+      });
+      var ka = document.getElementById('keep-arrow');
+      if (ka) ka.style.strokeDashoffset = '110';
+    }
+  });
+}());
+</script>
+
+
+<!--xnav-injected--><style>
+.xnav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:8px;align-items:center;font-family:Inter,system-ui,sans-serif;}
+.xnav-b{background:#FFFFFF;border:1px solid #E2E0D9;color:#1A1A18;border-radius:8px;padding:3px 11px;font-size:13px;text-decoration:none;}
+.xnav-b:hover{background:#F1EFE8;}
+.xnav-b.dis{opacity:.35;pointer-events:none;}
+.xnav-home{background:transparent;border:none;color:#6B6A65;font-size:12px;text-decoration:none;padding:3px 6px;}
+.xnav-lbl{color:#6B6A65;font-size:12px;padding:0 6px;letter-spacing:.02em;}
+</style>
+<div class="xnav"><a class="xnav-b" href="section_06_rl_ppo_grpo.html">↑ prev</a><a class="xnav-home" href="../index.html">☰ index</a><span class="xnav-lbl">DPO & Rejection</span><a class="xnav-b" href="section_08_rlvr_reasoning.html">next ↓</a></div>
+<script>
+(function(){
+  var order=["section_00_motivation.html","section_01_recipe_map.html","section_04_sft.html","section_03_three_families.html","section_02_llm_rl_problem.html","section_05_reward_modeling.html","section_06_rl_ppo_grpo.html","section_07_dpo_bon.html","section_08_rlvr_reasoning.html","section_09_overopt_eval.html","section_10_wrap.html"];
+  var cur=location.pathname.split('/').pop();
+  var i=order.indexOf(cur);
+  function go(j){ if(j>=0 && j<order.length) location.href=order[j]; }
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); go(i+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); go(i-1); }
+  }, true);
+})();
+</script>
+<!--/xnav-->
+</body>
+</html>

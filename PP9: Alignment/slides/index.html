@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preference Alignment — 90 min</title>
+<link rel="stylesheet" href="assets/theme.css">
+<style>
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Inter,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:920px;margin:0 auto;padding:80px 28px 100px;}
+h1{font-family:"Fraunces",Georgia,serif;font-size:3.2em;font-weight:600;margin:0 0 .15em;letter-spacing:-.02em;}
+.kick{color:var(--muted);font-size:.8em;letter-spacing:.22em;text-transform:uppercase;font-weight:600;margin:0 0 2.2em;}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 40px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+a.sec{display:flex;flex-direction:column;gap:5px;background:transparent;border:1px solid var(--line);
+  border-radius:10px;padding:18px 20px;text-decoration:none;color:var(--fg);transition:.15s;}
+a.sec:hover{background:var(--bg-2);border-color:var(--muted);}
+.sec .t{font-family:"Fraunces",Georgia,serif;font-size:1.08em;font-weight:600;line-height:1.2;}
+.sec .d{font-size:.78em;color:var(--muted);}
+.sec .m{font-size:.7em;color:var(--muted);}
+.tierhead{margin:42px 0 12px;color:var(--muted);font-size:.72em;letter-spacing:.24em;text-transform:uppercase;font-weight:500;}
+.start{display:inline-block;margin:0;border:1px solid var(--fg);color:var(--fg);font-weight:500;
+  padding:11px 26px;border-radius:999px;text-decoration:none;transition:.15s;font-size:.9em;}
+.start:hover{background:var(--fg);color:var(--bg);}
+.tip{margin-top:44px;font-size:.78em;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;line-height:1.7;}
+kbd{background:transparent;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:.85em;color:var(--fg);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Preference Alignment</h1>
+  <p class="kick">RLHF · 90-minute edition</p>
+
+  <a class="start" href="sections/section_00_motivation.html">Start →</a>
+
+  <div class="legend">
+    <span class="chip"><span class="dot" style="background:var(--c-policy)"></span>policy πθ</span>
+    <span class="chip"><span class="dot" style="background:var(--c-ref)"></span>reference π_ref</span>
+    <span class="chip"><span class="dot" style="background:var(--c-reward)"></span>reward r</span>
+    <span class="chip"><span class="dot" style="background:var(--c-adv)"></span>advantage A</span>
+    <span class="chip"><span class="dot" style="background:var(--c-kl)"></span>KL / reg.</span>
+    <span class="chip"><span class="dot" style="background:var(--c-logp)"></span>log-prob</span>
+    <span class="chip"><span class="dot" style="background:var(--c-pref)"></span>preference y_w/y_l</span>
+    <span class="chip"><span class="dot" style="background:var(--c-value)"></span>value V</span>
+  </div>
+
+  <div class="tierhead">Setup &amp; foundations · ~18 min</div>
+  <div class="grid">
+    <a class="sec" href="sections/section_00_motivation.html"><span class="t">Why Align? From Text Predictor to Assistant</span><span class="d">The hook + mode coverage → mode collapse</span><span class="m">5 slides · 5 min</span></a>
+    <a class="sec" href="sections/section_01_recipe_map.html"><span class="t">The Big Picture: The Post-Training Recipe</span><span class="d">The map + one spine, three recipes</span><span class="m">3 slides · 4 min</span></a>
+    <a class="sec" href="sections/section_04_sft.html"><span class="t">Instruction Fine-Tuning (SFT)</span><span class="d">Chat templates + the SFT loss</span><span class="m">5 slides · 6 min</span></a>
+    <a class="sec" href="sections/section_03_three_families.html"><span class="t">Three Families of Optimization Tools</span><span class="d">RL vs DPO vs best-of-N · online vs offline</span><span class="m">3 slides · 3 min</span></a>
+  </div>
+
+  <div class="tierhead">The core pipeline · ~49 min</div>
+  <div class="grid">
+    <a class="sec" href="sections/section_02_llm_rl_problem.html"><span class="t">The LLM as an RL Problem</span><span class="d">Tokens as actions + the KL objective</span><span class="m">8 slides · 11 min</span></a>
+    <a class="sec" href="sections/section_05_reward_modeling.html"><span class="t">Reward Modeling</span><span class="d">Bradley–Terry → the loss you implement</span><span class="m">7 slides · 12 min</span></a>
+    <a class="sec" href="sections/section_06_rl_ppo_grpo.html"><span class="t">RL Optimization: Policy Gradient → PPO → GRPO</span><span class="d">The centerpiece</span><span class="m">11 slides · 18 min</span></a>
+    <a class="sec" href="sections/section_07_dpo_bon.html"><span class="t">Direct Alignment (DPO) &amp; Best-of-N</span><span class="d">Skip the reward model</span><span class="m">9 slides · 11 min</span></a>
+  </div>
+
+  <div class="tierhead">Frontier &amp; reality checks · ~13 min</div>
+  <div class="grid">
+    <a class="sec" href="sections/section_08_rlvr_reasoning.html"><span class="t">The Frontier: Reasoning &amp; RLVR</span><span class="d">Verifiable rewards, o1 / R1</span><span class="m">4 slides · 5 min</span></a>
+    <a class="sec" href="sections/section_09_overopt_eval.html"><span class="t">How It Breaks &amp; How We Measure</span><span class="d">Goodhart, over-optimization, evaluation</span><span class="m">5 slides · 5 min</span></a>
+    <a class="sec" href="sections/section_10_wrap.html"><span class="t">Wrap: The Map, Filled</span><span class="d">Self-study pointers + recap</span><span class="m">3 slides · 3 min</span></a>
+  </div>
+
+  <div class="tip">
+    <kbd>→</kbd>/<kbd>Space</kbd> advance · <kbd>←</kbd> back within a chapter · <kbd>↓</kbd>/<kbd>↑</kbd> next/previous chapter · <kbd>Esc</kbd> overview · <kbd>F</kbd> fullscreen.
+  </div>
+</div>
+</body>
+</html>

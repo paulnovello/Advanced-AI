@@ -1,0 +1,449 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Big Picture: The Post-Training Recipe — Preference Alignment</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+/* Section-local helpers — no theme overrides */
+.stage-svg { display:block; margin:.4em auto 0; }
+
+/* recipe stage-flow rows */
+.recipe-flow { display:flex; align-items:center; justify-content:center; gap:6px; margin:.35em 0 .1em; flex-wrap:nowrap; }
+.recipe-box  { background:var(--bg-2); border:2px solid var(--line); border-radius:10px;
+               padding:.3em .7em; font-size:.78em; font-weight:600; text-align:center; line-height:1.2; white-space:nowrap; }
+.recipe-arrow{ color:var(--muted); font-size:1.1em; }
+.r-sft  { border-color:var(--c-logp);  color:var(--c-logp);  }
+.r-rm   { border-color:var(--c-reward);color:var(--c-reward);}
+.r-rl   { border-color:var(--c-policy);color:var(--c-policy);}
+.r-dpo  { border-color:var(--c-pref);  color:var(--c-pref);  }
+.r-rlvr { border-color:var(--c-adv);   color:var(--c-adv);   }
+.r-out  { border-color:var(--c-adv);   color:var(--c-adv);   }
+
+/* mini in-card recipe flows */
+.mini-flow { display:flex; align-items:center; justify-content:center; gap:4px; margin:.3em 0 .4em; flex-wrap:wrap; }
+.mini-box  { border:1.5px solid var(--line); border-radius:7px; padding:.14em .38em;
+             font-size:.52em; font-weight:600; text-align:center; line-height:1.22; background:var(--bg-2); }
+.mini-arrow{ color:var(--muted); font-size:.7em; }
+
+/* history strip on title slide */
+.hist-strip { display:flex; align-items:stretch; justify-content:center; gap:10px; margin-top:1.1em; }
+.hist-cell  { border:1.5px solid var(--line); border-radius:10px; padding:.5em .8em; font-size:.62em;
+              max-width:300px; background:var(--bg-2); }
+.hist-cell .hd { font-weight:700; display:block; margin-bottom:.25em; }
+.hist-arrow { align-self:center; color:var(--muted); font-size:1.2em; }
+
+/* compare grid — compact so the closing "Trend" line stays on screen */
+.card.compare-col { padding: 11px 14px; margin: 8px 0; }
+.compare-col h3 { font-size:.78em; margin-bottom:.25em; }
+.compare-col ul { font-size:.6em; margin-left:.7em; }
+.compare-col li { margin:.12em 0; }
+.common-row { display:flex; gap:10px; justify-content:center; margin-top:.35em; }
+.common-cell{ flex:1; background:var(--bg-2); border:1px solid var(--line); border-radius:12px;
+              padding:.42em .7em; font-size:.66em; text-align:center; }
+.common-cell .clabel{ font-size:.82em; font-weight:700; color:var(--accent); display:block; margin-bottom:.15em; }
+
+/* Term-spotlight objective: overlay all iterations exactly in place.
+   KaTeX display blocks carry a 1em margin that collapses on the in-flow
+   first child but not on the absolutely-positioned overlays — that mismatch
+   made the formula jump downward between fragments. Zero it out so every
+   iteration sits at the same baseline. */
+.eqstage .katex-display { margin: 0 !important; }
+.eqstage { min-height: 2.6em; }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 1 — TITLE + condensed history (3 fragments)
+════════════════════════════════════════════════════════ -->
+<section>
+  <h2>
+    The Big Picture: The Post-Training Recipe
+  </h2>
+
+  <div class="grid2" style="margin-top:.3em; gap:28px; align-items:center;">
+    <div>
+      <p class="fragment fade-up" data-fragment-index="1" style="margin:0;">
+        Three canonical recipes — <span class="hl-reward">InstructGPT</span>,
+        <span class="hl-adv">Tülu&nbsp;3</span>,
+        <span class="hl-policy">DeepSeek R1</span> — share one spine.
+      </p>
+    </div>
+    <div style="max-width:460px; justify-self:center; width:100%;">
+      <iframe src="https://player.vimeo.com/video/754042470?h=e64a40690d&amp;badge=0&amp;autopause=0&amp;title=0&amp;byline=0&amp;portrait=0"
+              style="width:100%; aspect-ratio:16/9; border:0; border-radius:10px; display:block; background:#000;"
+              allow="autoplay; fullscreen; picture-in-picture" allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      <p style="font-size:.58em; color:var(--muted); margin:.35em 0 0; text-align:center;">
+        Christiano et al., 2017 — learning from human preferences (OpenAI). The idea that seeded RLHF.
+      </p>
+    </div>
+  </div>
+
+  <!-- 60-second history, built era by era -->
+  <div class="hist-strip" style="margin-top:.7em;">
+    <div class="hist-cell fragment fade-up" data-fragment-index="2">
+      <span class="hd" style="color:var(--c-logp);">pre-2018 — RL from preferences</span>
+      TAMER (2009) · Christiano et al. 2017: agents trained from pairwise human judgments (Atari).
+    </div>
+    <span class="hist-arrow fragment" data-fragment-index="3">→</span>
+    <div class="hist-cell fragment fade-up" data-fragment-index="3">
+      <span class="hd" style="color:var(--c-reward);">2019–2022 — RLHF on LMs</span>
+      Ziegler 2019 · summarization · WebGPT · <strong>InstructGPT → ChatGPT</strong>.
+    </div>
+    <span class="hist-arrow fragment" data-fragment-index="4">→</span>
+    <div class="hist-cell fragment fade-up" data-fragment-index="4">
+      <span class="hd" style="color:var(--c-policy);">2023 → now — "PreFT"</span>
+      DPO · Llama 2/3 · Tülu 3 · RLVR · o1 / R1 reasoning models.
+    </div>
+  </div>
+
+  <div class="pagetag">1</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 2 — THE PIPELINE MAP
+     The map draws itself slowly (~7.5s) when the slide is
+     entered; then the objective is spotlighted term by term.
+════════════════════════════════════════════════════════ -->
+<section>
+  <h2>The Post-Training Map</h2>
+  <p style="font-size:.74em;color:var(--muted);">
+    Every aligned LLM walks this pipeline.
+  </p>
+
+  <svg class="stage-svg"
+       viewBox="0 0 1100 240" width="1050" height="230"
+       xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+    <defs>
+      <marker id="ah-muted" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#6B6A65"/>
+      </marker>
+      <marker id="ah-logp" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#9A7A0E"/>
+      </marker>
+      <marker id="ah-reward" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#B5730F"/>
+      </marker>
+      <marker id="ah-policy" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#1D6FB8"/>
+      </marker>
+      <marker id="ah-adv" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#2E7D46"/>
+      </marker>
+      <marker id="ah-pref" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#C2185B"/>
+      </marker>
+    </defs>
+
+    <!-- === ROW 1: main pipeline === -->
+    <g>
+      <rect class="node" x="10" y="55" width="120" height="56" rx="10" stroke="#9A7A0E" stroke-width="2" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="0.2s" fill="freeze"/>
+      </rect>
+      <text class="lbl" x="70" y="81" text-anchor="middle" font-size="13" font-weight="700" fill="#9A7A0E" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="0.2s" fill="freeze"/>
+        Base LLM
+      </text>
+      <text class="lbl muted" x="70" y="98" text-anchor="middle" font-size="10.5" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="0.2s" fill="freeze"/>
+        pretrained
+      </text>
+    </g>
+
+    <line x1="131" y1="83" x2="183" y2="83" stroke="#9A7A0E" stroke-width="2.2"
+          stroke-dasharray="6 5" marker-end="url(#ah-logp)" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="1.1s" fill="freeze"/>
+      <animate attributeName="stroke-dashoffset" from="0" to="-22" dur="0.8s" begin="1.1s" repeatCount="indefinite"/>
+    </line>
+
+    <g>
+      <rect class="node" x="184" y="55" width="120" height="56" rx="10" stroke="#9A7A0E" stroke-width="2" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="1.4s" fill="freeze"/>
+      </rect>
+      <text class="lbl" x="244" y="79" text-anchor="middle" font-size="13" font-weight="700" fill="#9A7A0E" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="1.4s" fill="freeze"/>
+        SFT
+      </text>
+      <text class="lbl muted" x="244" y="97" text-anchor="middle" font-size="10" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="1.4s" fill="freeze"/>
+        imitation
+      </text>
+    </g>
+
+    <line x1="305" y1="83" x2="355" y2="83" stroke="#B5730F" stroke-width="2.2"
+          stroke-dasharray="6 5" marker-end="url(#ah-reward)" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="2.3s" fill="freeze"/>
+      <animate attributeName="stroke-dashoffset" from="0" to="-22" dur="0.8s" begin="2.3s" repeatCount="indefinite"/>
+    </line>
+
+    <g>
+      <rect class="node" x="356" y="55" width="136" height="56" rx="10" stroke="#B5730F" stroke-width="2" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="2.6s" fill="freeze"/>
+      </rect>
+      <text class="lbl" x="424" y="79" text-anchor="middle" font-size="13" font-weight="700" fill="#B5730F" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="2.6s" fill="freeze"/>
+        Reward Model
+      </text>
+      <text class="lbl muted" x="424" y="97" text-anchor="middle" font-size="10" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="2.6s" fill="freeze"/>
+        preference data
+      </text>
+    </g>
+
+    <line x1="493" y1="83" x2="543" y2="83" stroke="#1D6FB8" stroke-width="2.2"
+          stroke-dasharray="6 5" marker-end="url(#ah-policy)" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="3.5s" fill="freeze"/>
+      <animate attributeName="stroke-dashoffset" from="0" to="-22" dur="0.8s" begin="3.5s" repeatCount="indefinite"/>
+    </line>
+
+    <g>
+      <rect class="node" x="544" y="55" width="130" height="56" rx="10" stroke="#1D6FB8" stroke-width="2" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="3.8s" fill="freeze"/>
+      </rect>
+      <text class="lbl" x="609" y="79" text-anchor="middle" font-size="13" font-weight="700" fill="#1D6FB8" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="3.8s" fill="freeze"/>
+        RL Fine-tune
+      </text>
+      <text class="lbl muted" x="609" y="97" text-anchor="middle" font-size="10" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="3.8s" fill="freeze"/>
+        PPO / GRPO
+      </text>
+    </g>
+
+    <text class="lbl" x="609" y="128" text-anchor="middle" font-size="10.5" fill="#7E3C9E" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="4.2s" fill="freeze"/>
+      + β·KL(π‖π_ref)
+    </text>
+
+    <line x1="675" y1="83" x2="725" y2="83" stroke="#2E7D46" stroke-width="2.2"
+          stroke-dasharray="6 5" marker-end="url(#ah-adv)" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="4.7s" fill="freeze"/>
+      <animate attributeName="stroke-dashoffset" from="0" to="-22" dur="0.8s" begin="4.7s" repeatCount="indefinite"/>
+    </line>
+
+    <g>
+      <rect class="node" x="726" y="55" width="130" height="56" rx="10" stroke="#2E7D46" stroke-width="2.5" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="5.0s" fill="freeze"/>
+        <animate attributeName="stroke-width" from="2.5" to="4" dur="0.7s" begin="5.2s" repeatCount="3" fill="freeze"/>
+      </rect>
+      <text class="lbl" x="791" y="79" text-anchor="middle" font-size="13" font-weight="700" fill="#2E7D46" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="5.0s" fill="freeze"/>
+        Aligned LLM
+      </text>
+      <text class="lbl muted" x="791" y="97" text-anchor="middle" font-size="10" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="5.0s" fill="freeze"/>
+        ✓ deployed
+      </text>
+    </g>
+
+    <!-- === DPO SHORTCUT BRANCH === -->
+    <text class="lbl muted" x="244" y="148" text-anchor="middle" font-size="11" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="5.7s" fill="freeze"/>
+      ↓ DPO shortcut
+    </text>
+
+    <line x1="244" y1="149" x2="244" y2="168" stroke="#C2185B" stroke-width="1.8"
+          stroke-dasharray="5 4" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="6.0s" fill="freeze"/>
+    </line>
+
+    <g>
+      <rect class="node" x="184" y="168" width="120" height="52" rx="10" stroke="#C2185B" stroke-width="2" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="6.1s" fill="freeze"/>
+      </rect>
+      <text class="lbl" x="244" y="191" text-anchor="middle" font-size="13" font-weight="700" fill="#C2185B" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="6.1s" fill="freeze"/>
+        DPO
+      </text>
+      <text class="lbl muted" x="244" y="208" text-anchor="middle" font-size="10" opacity="0">
+        <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="6.1s" fill="freeze"/>
+        no explicit RM
+      </text>
+    </g>
+
+    <path d="M305,194 C460,194 640,194 724,83" stroke="#C2185B" stroke-width="1.8"
+          stroke-dasharray="5 4" fill="none" marker-end="url(#ah-pref)" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.6s" begin="6.7s" fill="freeze"/>
+      <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" begin="6.7s" repeatCount="indefinite"/>
+    </path>
+
+    <text class="lbl" x="510" y="222" text-anchor="middle" font-size="11" fill="#C2185B" opacity="0">
+      <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="7.1s" fill="freeze"/>
+      skips reward model; optimizes preferences directly
+    </text>
+  </svg>
+
+  <!-- Core objective — Term Spotlight (Pattern B) -->
+  <div style="text-align:center; margin-top:.15em;">
+    <div class="eqstage" style="font-size:.72em; max-width:780px; margin:0 auto;">
+      <div class="fragment current-visible" data-fragment-index="1">
+        \[\max_{\htmlClass{k-dim}{\pi_\theta}} \mathbb{E}\!\left[\htmlClass{k-dim}{r_\theta(x,y)}\right] - \htmlClass{k-dim}{\beta\, D_{\mathrm{KL}}\!\left(\pi_\theta \;\|\; \pi_{\mathrm{ref}}\right)}\]
+      </div>
+      <div class="fragment current-visible" data-fragment-index="2">
+        \[\max_{\htmlClass{k-policy}{\pi_\theta}} \mathbb{E}\!\left[\htmlClass{k-dim}{r_\theta(x,y)}\right] - \htmlClass{k-dim}{\beta\, D_{\mathrm{KL}}\!\left(\htmlClass{k-policy}{\pi_\theta} \;\|\; \htmlClass{k-dim}{\pi_{\mathrm{ref}}}\right)}\]
+      </div>
+      <div class="fragment current-visible" data-fragment-index="3">
+        \[\max_{\htmlClass{k-dim}{\pi_\theta}} \mathbb{E}\!\left[\htmlClass{k-reward}{r_\theta(x,y)}\right] - \htmlClass{k-dim}{\beta\, D_{\mathrm{KL}}\!\left(\pi_\theta \;\|\; \pi_{\mathrm{ref}}\right)}\]
+      </div>
+      <div class="fragment" data-fragment-index="4">
+        \[\max_{\htmlClass{k-policy}{\pi_\theta}} \mathbb{E}\!\left[\htmlClass{k-reward}{r_\theta(x,y)}\right] - \htmlClass{k-kl}{\beta\, D_{\mathrm{KL}}\!\left(\htmlClass{k-policy}{\pi_\theta} \;\|\; \htmlClass{k-ref}{\pi_{\mathrm{ref}}}\right)}\]
+      </div>
+    </div>
+    <div class="fragment callout policy" data-fragment-index="2" style="font-size:.6em; display:inline-block; max-width:760px; text-align:left; margin:.25em 0;">
+      <span class="hl-policy">π<sub>θ</sub></span> — the <em>policy</em> we are training: a language model mapping prompt → completion.
+    </div>
+    <div class="fragment callout reward" data-fragment-index="3" style="font-size:.6em; display:inline-block; max-width:760px; text-align:left; margin:.25em 0;">
+      <span class="hl-reward">r<sub>θ</sub>(x,y)</span> — scalar reward from the Reward Model; higher = more preferred response.
+    </div>
+    <div class="fragment callout kl" data-fragment-index="4" style="font-size:.6em; display:inline-block; max-width:760px; text-align:left; margin:.25em 0;">
+      <span class="hl-kl">β·KL(π‖π<sub>ref</sub>)</span> — KL penalty keeping π<sub>θ</sub> near the SFT reference; prevents reward hacking.
+    </div>
+  </div>
+  <div class="pagetag">2</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 3 — ONE SPINE, THREE RECIPES (recipes build one
+     by one, each with its mini stage-flow)
+════════════════════════════════════════════════════════ -->
+<section>
+  <h2>One Spine, Three Recipes</h2>
+
+  <!-- Shared spine -->
+  <div class="recipe-flow fragment fade-up" data-fragment-index="1" style="margin:.45em 0;">
+    <div class="recipe-box r-sft">SFT</div>
+    <span class="recipe-arrow">→</span>
+    <div class="recipe-box r-rm">Preference signal</div>
+    <span class="recipe-arrow">→</span>
+    <div class="recipe-box r-rl">RL optimization</div>
+    <span class="recipe-arrow" style="color:var(--c-pref);">/ DPO shortcut</span>
+  </div>
+
+  <div class="grid3" style="margin-top:.4em;">
+    <div class="card compare-col fragment fade-up" data-fragment-index="2">
+      <h3 style="color:var(--c-logp);">InstructGPT <span style="font-size:.62em;color:var(--muted);font-weight:400;">OpenAI 2022 · the original</span></h3>
+      <div class="mini-flow">
+        <div class="mini-box" style="border-color:var(--c-logp);color:var(--c-logp);">SFT<br>10K demos</div>
+        <span class="mini-arrow">→</span>
+        <div class="mini-box" style="border-color:var(--c-reward);color:var(--c-reward);">RM<br>33K pairs</div>
+        <span class="mini-arrow">→</span>
+        <div class="mini-box" style="border-color:var(--c-policy);color:var(--c-policy);">PPO<br>31K prompts</div>
+      </div>
+      <ul>
+        <li>3 stages · explicit RM · human data</li>
+        <li>The recipe that made ChatGPT possible</li>
+      </ul>
+    </div>
+    <div class="card compare-col fragment fade-up" data-fragment-index="3">
+      <h3 style="color:var(--c-adv);">Tülu 3 <span style="font-size:.62em;color:var(--muted);font-weight:400;">Ai2 2024 · open</span></h3>
+      <div class="mini-flow">
+        <div class="mini-box" style="border-color:var(--c-logp);color:var(--c-logp);">SFT<br>1M synthetic</div>
+        <span class="mini-arrow">→</span>
+        <div class="mini-box" style="border-color:var(--c-pref);color:var(--c-pref);">DPO<br>1M pairs</div>
+        <span class="mini-arrow">→</span>
+        <div class="mini-box" style="border-color:var(--c-adv);color:var(--c-adv);">RLVR<br>10K math</div>
+      </div>
+      <ul>
+        <li>No explicit RM — DPO instead</li>
+        <li>Surgical RLVR on math only; general skills preserved</li>
+      </ul>
+    </div>
+    <div class="card compare-col fragment fade-up" data-fragment-index="4">
+      <h3 style="color:var(--c-policy);">DeepSeek R1 <span style="font-size:.62em;color:var(--muted);font-weight:400;">2025 · reasoning</span></h3>
+      <div class="mini-flow">
+        <div class="mini-box" style="border-color:var(--c-logp);color:var(--c-logp);">cold-start SFT<br>100K+ CoT</div>
+        <span class="mini-arrow">→</span>
+        <div class="mini-box" style="border-color:var(--c-policy);color:var(--c-policy);">RLVR<br>to convergence</div>
+        <span class="mini-arrow">→</span>
+        <div class="mini-box" style="border-color:var(--c-logp);color:var(--c-logp);">RS-SFT<br>800K</div>
+        <span class="mini-arrow">→</span>
+        <div class="mini-box" style="border-color:var(--c-policy);color:var(--c-policy);">mixed RL<br>+ pref RM</div>
+      </div>
+      <ul>
+        <li><strong>cold start:</strong> small CoT SFT → readable reasoning format before RL</li>
+        <li><strong>RS-SFT:</strong> rejection-sampling SFT on the best RLVR samples (~800K)</li>
+        <li><strong>mixed RL + pref RM:</strong> final RL = verifiable rewards + a preference RM</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="common-row fragment fade-up" data-fragment-index="5">
+    <div class="common-cell">
+      <span class="clabel">Always present</span>
+      <span class="hl-reward">Imitation learning</span> (SFT) as foundation
+    </div>
+    <div class="common-cell">
+      <span class="clabel">Always present</span>
+      <span style="color:var(--c-pref);font-weight:600;">Preference signal</span> — explicit RM <em>or</em> DPO
+    </div>
+    <div class="common-cell">
+      <span class="clabel">Always present</span>
+      <span class="hl-policy">RL optimization</span> with <span class="hl-kl">KL regularization</span>
+    </div>
+  </div>
+
+  <div class="fragment fade-up" data-fragment-index="6">
+    <p style="font-size:.68em; color:var(--muted); margin-top:.3em;">
+      Trend: more stages · more data · more synthetic data · RL on verifiable signals for reasoning.
+    </p>
+  </div>
+  <div class="pagetag">3</div>
+</section>
+
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/math/math.min.js"></script>
+<script>
+Reveal.initialize({
+  hash:true, slideNumber:'c/t', transition:'slide', backgroundTransition:'fade',
+  katex:{ delimiters:[
+     {left:'\\[',right:'\\]',display:true},
+     {left:'$',right:'$',display:false}],
+     trust:true, strict:false },
+  width:1280, height:720, margin:0.04,
+  plugins:[ RevealMath.KaTeX ]
+});
+
+/* ─── Replay auto-running SMIL when a slide is (re)entered ─── */
+function restartSVGs(slide){
+  if(!slide) return;
+  slide.querySelectorAll('svg').forEach(function(s){
+    if(s.querySelector('animate,animateTransform,animateMotion')){
+      try { s.setCurrentTime(0); } catch(e) {}
+    }
+  });
+}
+Reveal.on('ready', function(e){ restartSVGs(e.currentSlide); });
+Reveal.on('slidechanged', function(e){ restartSVGs(e.currentSlide); });
+</script>
+
+<!--xnav--><style>
+.xnav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:8px;align-items:center;font-family:Inter,system-ui,sans-serif;}
+.xnav-b{background:#FFFFFF;border:1px solid #E2E0D9;color:#1A1A18;border-radius:8px;padding:3px 11px;font-size:13px;text-decoration:none;}
+.xnav-b:hover{background:#F1EFE8;}
+.xnav-b.dis{opacity:.35;pointer-events:none;}
+.xnav-home{background:transparent;border:none;color:#6B6A65;font-size:12px;text-decoration:none;padding:3px 6px;}
+.xnav-lbl{color:#6B6A65;font-size:12px;padding:0 6px;letter-spacing:.02em;}
+</style>
+<div class="xnav"><a class="xnav-b" href="section_00_motivation.html">↑ prev</a><a class="xnav-home" href="../index.html">☰ index</a><span class="xnav-lbl">The Recipe Map</span><a class="xnav-b" href="section_04_sft.html">next ↓</a></div>
+<script>
+(function(){
+  var order=["section_00_motivation.html","section_01_recipe_map.html","section_04_sft.html","section_03_three_families.html","section_02_llm_rl_problem.html","section_05_reward_modeling.html","section_06_rl_ppo_grpo.html","section_07_dpo_bon.html","section_08_rlvr_reasoning.html","section_09_overopt_eval.html","section_10_wrap.html"];
+  var cur=location.pathname.split('/').pop();
+  var i=order.indexOf(cur);
+  function go(j){ if(j>=0 && j<order.length) location.href=order[j]; }
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); go(i+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); go(i-1); }
+  }, true);
+})();
+</script>
+<!--/xnav-->
+</body>
+</html>

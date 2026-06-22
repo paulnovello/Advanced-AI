@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instruction Fine-Tuning (SFT) — Preference Alignment</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+/* local-only additive overrides — no theme rules redefined */
+.token-system { color: var(--c-pref);   font-weight: 700; }
+.token-user   { color: var(--c-policy); font-weight: 700; }
+.token-asst   { color: var(--c-adv);    font-weight: 700; }
+.token-im     { color: var(--c-logp);   font-weight: 700; }
+.token-eos    { color: var(--c-reward); font-weight: 700; }
+
+.pill {
+  display:inline-block; border-radius:999px;
+  padding:.1em .55em; font-size:.75em; font-weight:700;
+}
+.pill.masked  { background:rgba(126,60,158,.25); color:var(--c-kl);    border:1px solid var(--c-kl); }
+.pill.trained { background:rgba(29,111,184,.25);  color:var(--c-policy);border:1px solid var(--c-policy); }
+
+/* chat-template SVG layout helpers */
+.chat-fig { width:100%; max-width:1100px; display:block; margin:.4em auto 0; }
+
+/* loss-mask figure: token row */
+.loss-fig { display:flex; flex-wrap:wrap; gap:6px; justify-content:center;
+            padding:.6em .4em; margin:.5em 0; }
+.loss-fig .tok { font-size:.72em; transition:all .35s ease; }
+.loss-fig .tok.dim   { opacity:.22; border-color:var(--line); color:var(--muted); }
+.loss-fig .tok.lit   { border-color:var(--c-logp); color:var(--c-logp);
+                       box-shadow:0 0 8px rgba(154,122,14,.45); background:rgba(154,122,14,.1); }
+.loss-fig .tok.label { background:transparent; border:none; font-size:.65em;
+                       color:var(--muted); font-style:italic; padding:0 .3em; }
+
+/* implementation detail code card */
+.code-card {
+  background:#FBFAF7; border:1px solid var(--line); border-radius:12px;
+  padding:14px 18px; font-family:"JetBrains Mono","Fira Code","Cascadia Code",monospace;
+  font-size:.68em; line-height:1.6; white-space:pre-wrap; overflow:visible;
+}
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+  <!-- =====================  SLIDE 1 — TITLE  ===================== -->
+  <section>
+    <h2>Instruction Fine-Tuning (SFT)</h2>
+    <p class="fragment" data-fragment-index="1">
+      How a base language model learns to <span class="hl-policy">follow instructions</span>
+      — and why that makes every downstream alignment method possible.
+    </p>
+  </section>
+
+  <!-- =====================  SLIDE 2 — ANIMATED CHAT TEMPLATE  ===================== -->
+  <section>
+    <h2>Chat Templates: Turning Messages into a Token Sequence</h2>
+
+    <p class="fragment" data-fragment-index="1">
+      A <span class="hl">chat template</span> wraps each message in
+      <span class="token-im">special tokens</span> and concatenates everything into a
+      single flat sequence the LM trains on autoregressively.
+    </p>
+
+    <!-- ANIMATED CHAT TEMPLATE SVG (SMIL-driven, autoplays) -->
+    <!-- Sequence of 8 "message blocks" appearing left-to-right with colored borders -->
+    <svg class="chat-fig" viewBox="0 0 1080 230" xmlns="http://www.w3.org/2000/svg"
+         style="margin-top:.3em;" aria-label="Animated chat template token sequence">
+      <defs>
+        <!-- Glow filter for active block -->
+        <filter id="glow5" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="4" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- BOS token -->
+      <g id="ct-bos">
+        <rect x="10" y="70" width="80" height="90" rx="8" fill="#FFFFFF" stroke="#E2E0D9" stroke-width="2">
+          <animate attributeName="opacity" from="0" to="1" begin="0.34s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="50" y="108" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="monospace" opacity="0">
+          &lt;bos&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="0.34s" dur="0.56s" fill="freeze"/>
+        </text>
+      </g>
+
+      <!-- SYSTEM block -->
+      <g id="ct-sys">
+        <rect x="100" y="55" width="200" height="120" rx="8" fill="#FFFFFF" stroke="#C2185B" stroke-width="0">
+          <animate attributeName="opacity" from="0" to="1" begin="1.4s" dur="0.56s" fill="freeze"/>
+          <animate attributeName="stroke-width" from="0" to="2" begin="1.4s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="200" y="82" text-anchor="middle" font-size="11" fill="#9A7A0E" font-family="monospace" opacity="0">
+          &lt;|im_start|&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="1.4s" dur="0.56s" fill="freeze"/>
+        </text>
+        <text x="200" y="101" text-anchor="middle" font-size="13" fill="#C2185B" font-weight="bold" font-family="monospace" opacity="0">
+          system
+          <animate attributeName="opacity" from="0" to="1" begin="1.7s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="200" y="120" text-anchor="middle" font-size="9.5" fill="#6B6A65" font-family="monospace" opacity="0">
+          You are a pirate…
+          <animate attributeName="opacity" from="0" to="1" begin="1.9s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="200" y="139" text-anchor="middle" font-size="11" fill="#9A7A0E" font-family="monospace" opacity="0">
+          &lt;|im_end|&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="2s" dur="0.42s" fill="freeze"/>
+        </text>
+        <!-- role label above -->
+        <text x="200" y="48" text-anchor="middle" font-size="11" fill="#C2185B" font-family="Inter,sans-serif" font-weight="600" opacity="0">
+          SYSTEM
+          <animate attributeName="opacity" from="0" to="1" begin="1.5s" dur="0.42s" fill="freeze"/>
+        </text>
+      </g>
+
+      <!-- USER block 1 -->
+      <g id="ct-u1">
+        <rect x="310" y="55" width="200" height="120" rx="8" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="0">
+          <animate attributeName="opacity" from="0" to="1" begin="2.7s" dur="0.56s" fill="freeze"/>
+          <animate attributeName="stroke-width" from="0" to="2" begin="2.7s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="410" y="82" text-anchor="middle" font-size="11" fill="#9A7A0E" font-family="monospace" opacity="0">
+          &lt;|im_start|&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="2.7s" dur="0.56s" fill="freeze"/>
+        </text>
+        <text x="410" y="101" text-anchor="middle" font-size="13" fill="#1D6FB8" font-weight="bold" font-family="monospace" opacity="0">
+          user
+          <animate attributeName="opacity" from="0" to="1" begin="3.1s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="410" y="120" text-anchor="middle" font-size="9" fill="#6B6A65" font-family="monospace" opacity="0">
+          How many helicopters…
+          <animate attributeName="opacity" from="0" to="1" begin="3.2s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="410" y="139" text-anchor="middle" font-size="11" fill="#9A7A0E" font-family="monospace" opacity="0">
+          &lt;|im_end|&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="3.4s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="410" y="48" text-anchor="middle" font-size="11" fill="#1D6FB8" font-family="Inter,sans-serif" font-weight="600" opacity="0">
+          USER
+          <animate attributeName="opacity" from="0" to="1" begin="2.9s" dur="0.42s" fill="freeze"/>
+        </text>
+      </g>
+
+      <!-- ASSISTANT block -->
+      <g id="ct-a1">
+        <rect x="520" y="55" width="210" height="120" rx="8" fill="#FFFFFF" stroke="#2E7D46" stroke-width="0">
+          <animate attributeName="opacity" from="0" to="1" begin="4.1s" dur="0.56s" fill="freeze"/>
+          <animate attributeName="stroke-width" from="0" to="2" begin="4.1s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="625" y="82" text-anchor="middle" font-size="11" fill="#9A7A0E" font-family="monospace" opacity="0">
+          &lt;|im_start|&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="4.1s" dur="0.56s" fill="freeze"/>
+        </text>
+        <text x="625" y="101" text-anchor="middle" font-size="13" fill="#2E7D46" font-weight="bold" font-family="monospace" opacity="0">
+          assistant
+          <animate attributeName="opacity" from="0" to="1" begin="4.4s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="625" y="120" text-anchor="middle" font-size="9" fill="#6B6A65" font-family="monospace" opacity="0">
+          Arrr, no more than…
+          <animate attributeName="opacity" from="0" to="1" begin="4.6s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="625" y="139" text-anchor="middle" font-size="11" fill="#B5730F" font-family="monospace" opacity="0">
+          &lt;|im_end|&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="4.8s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="625" y="48" text-anchor="middle" font-size="11" fill="#2E7D46" font-family="Inter,sans-serif" font-weight="600" opacity="0">
+          ASSISTANT ← loss computed here
+          <animate attributeName="opacity" from="0" to="1" begin="4.2s" dur="0.42s" fill="freeze"/>
+        </text>
+      </g>
+
+      <!-- Generation prompt indicator -->
+      <g id="ct-gen">
+        <rect x="740" y="70" width="170" height="90" rx="8" fill="rgba(29,111,184,.08)" stroke="#1D6FB8" stroke-width="0" stroke-dasharray="6 4">
+          <animate attributeName="opacity" from="0" to="1" begin="5.4s" dur="0.56s" fill="freeze"/>
+          <animate attributeName="stroke-width" from="0" to="2" begin="5.4s" dur="0.56s" fill="freeze"/>
+        </rect>
+        <text x="825" y="105" text-anchor="middle" font-size="11" fill="#9A7A0E" font-family="monospace" opacity="0">
+          &lt;|im_start|&gt;
+          <animate attributeName="opacity" from="0" to="1" begin="5.4s" dur="0.56s" fill="freeze"/>
+        </text>
+        <text x="825" y="124" text-anchor="middle" font-size="11" fill="#1D6FB8" font-family="monospace" opacity="0">
+          assistant ← generate
+          <animate attributeName="opacity" from="0" to="1" begin="5.8s" dur="0.42s" fill="freeze"/>
+        </text>
+        <text x="825" y="55" text-anchor="middle" font-size="11" fill="#1D6FB8" font-family="Inter,sans-serif" opacity="0">
+          generation cue
+          <animate attributeName="opacity" from="0" to="1" begin="5.6s" dur="0.42s" fill="freeze"/>
+        </text>
+      </g>
+
+      <!-- Blinking cursor -->
+      <rect id="ct-cursor" x="914" y="118" width="8" height="16" rx="1" fill="#1D6FB8" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.6;0.7;0.9;1" dur="1.7s" begin="6.1s" repeatCount="indefinite"/>
+      </rect>
+
+      <!-- Legend row at bottom -->
+      <circle cx="32" cy="190" r="5" fill="#9A7A0E" opacity="0"><animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></circle>
+      <text x="42" y="195" font-size="11" fill="#9A7A0E" font-family="Inter,sans-serif" opacity="0">&lt;|im_start|&gt; / &lt;|im_end|&gt;<animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></text>
+      <circle cx="240" cy="190" r="5" fill="#C2185B" opacity="0"><animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></circle>
+      <text x="250" y="195" font-size="11" fill="#C2185B" font-family="Inter,sans-serif" opacity="0">system<animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></text>
+      <circle cx="340" cy="190" r="5" fill="#1D6FB8" opacity="0"><animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></circle>
+      <text x="350" y="195" font-size="11" fill="#1D6FB8" font-family="Inter,sans-serif" opacity="0">user<animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></text>
+      <circle cx="430" cy="190" r="5" fill="#2E7D46" opacity="0"><animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></circle>
+      <text x="440" y="195" font-size="11" fill="#2E7D46" font-family="Inter,sans-serif" opacity="0">assistant<animate attributeName="opacity" from="0" to="1" begin="6.5s" dur="0.42s" fill="freeze"/></text>
+    </svg>
+
+    <p class="fragment" data-fragment-index="2" style="font-size:.82em;margin-top:.3em;">
+      Three canonical roles:
+      <span class="token-system">system</span> (hidden instructions),
+      <span class="token-user">user</span> (human turn),
+      <span class="token-asst">assistant</span> (model response).
+      Special tokens <span class="token-im">&lt;|im_start|&gt;</span> / <span class="token-im">&lt;|im_end|&gt;</span> delimit every message.
+    </p>
+  </section>
+
+  <!-- =====================  SLIDE 3 — SFT LOSS DERIVATION CHAIN  ===================== -->
+  <section>
+    <h2>SFT Loss: Derivation Chain</h2>
+
+    <!-- PATTERN A — DERIVATION CHAIN -->
+    <div class="deriv">
+
+      <!-- Line 1: per-token likelihood -->
+      <div class="line fragment" data-fragment-index="1">
+        <div class="eq">
+          \[ \prod_{t=1}^{T} \htmlClass{k-policy}{\pi_\theta}\!\bigl(\htmlClass{k-adv}{y_t} \mid x, y_{&lt;t}\bigr) \]
+        </div>
+        <div class="why">
+          Start: the <span style="color:var(--c-policy)">model's</span> likelihood of the full response
+          as a product of per-token conditional probabilities.
+        </div>
+      </div>
+
+      <!-- Line 2: take log → sum of log-probs -->
+      <div class="line fragment" data-fragment-index="2">
+        <div class="eq">
+          \[ \log \prod_{t=1}^{T} \htmlClass{k-policy}{\pi_\theta}\!\bigl(\htmlClass{k-adv}{y_t} \mid x, y_{&lt;t}\bigr)
+             = \sum_{t=1}^{T} \htmlClass{k-logp}{\log \pi_\theta\!\bigl(y_t \mid x, y_{&lt;t}\bigr)} \]
+        </div>
+        <div class="why">
+          Take <span style="color:var(--c-logp)">log</span>: product becomes a sum — numerically stable and additive.
+        </div>
+      </div>
+
+      <!-- Line 3 (final): negate + mask → the SFT loss -->
+      <div class="line fragment" data-fragment-index="3">
+        <div class="eq">
+          <div class="eqresult">
+            \[ \htmlClass{k-kl}{\mathcal{L}_{\text{SFT}}}
+               = -\frac{1}{\sum_t \htmlClass{k-kl}{m_t}}\sum_{t=1}^{T}
+                 \htmlClass{k-kl}{m_t} \cdot
+                 \htmlClass{k-logp}{\log \htmlClass{k-policy}{\pi_\theta}\!\bigl(\htmlClass{k-adv}{y_t} \mid x, y_{&lt;t}\bigr)} \]
+          </div>
+        </div>
+        <div class="why">
+          Negate (NLL = cross-entropy) and add the <span style="color:var(--c-kl)">loss mask</span>
+          $\htmlClass{k-kl}{m_t}\!\in\!\{0,1\}$: 0 on prompt tokens, 1 on response tokens.
+          Same loss as pretraining — just on a <span style="color:var(--c-kl)">masked</span> subset.
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =====================  SLIDE 4 — ANIMATED LOSS-MASK FIGURE  ===================== -->
+  <section>
+    <h2>Loss Mask: Where Gradients Flow</h2>
+
+    <p class="fragment" data-fragment-index="1" style="font-size:.88em;">
+      In a packed training sequence the <span class="hl-kl">prompt tokens</span> are masked out
+      ($m_t = 0$); only <span class="hl-adv">response tokens</span> contribute to the gradient.
+    </p>
+
+    <!-- ANIMATED LOSS-MASK FIGURE (fragment-driven via inline script below) -->
+    <div id="loss-mask-fig" style="margin:.5em 0;">
+
+      <!-- Row 1: full sequence label -->
+      <div style="text-align:center;font-size:.72em;color:var(--muted);margin-bottom:.3em;">
+        Full training sequence (prompt + response concatenated):
+      </div>
+
+      <!-- Token row — all start dim, response tokens light up on fragment -->
+      <div class="loss-fig" id="lm-tokens">
+        <!-- special tokens + prompt tokens (dim, masked) -->
+        <span class="tok dim" data-role="special">&lt;|im_start|&gt;</span>
+        <span class="tok dim" data-role="special">system</span>
+        <span class="tok dim" data-role="prompt">You</span>
+        <span class="tok dim" data-role="prompt">are</span>
+        <span class="tok dim" data-role="prompt">a</span>
+        <span class="tok dim" data-role="prompt">pirate</span>
+        <span class="tok dim" data-role="special">&lt;|im_end|&gt;</span>
+        <span class="tok dim" data-role="special">&lt;|im_start|&gt;</span>
+        <span class="tok dim" data-role="special">user</span>
+        <span class="tok dim" data-role="prompt">How</span>
+        <span class="tok dim" data-role="prompt">many</span>
+        <span class="tok dim" data-role="prompt">helicopters</span>
+        <span class="tok dim" data-role="prompt">…</span>
+        <span class="tok dim" data-role="special">&lt;|im_end|&gt;</span>
+        <span class="tok dim" data-role="special">&lt;|im_start|&gt;</span>
+        <span class="tok dim" data-role="special">assistant</span>
+        <!-- response tokens (light up) -->
+        <span class="tok dim" data-role="response">Arrr</span>
+        <span class="tok dim" data-role="response">,</span>
+        <span class="tok dim" data-role="response">I</span>
+        <span class="tok dim" data-role="response">'d</span>
+        <span class="tok dim" data-role="response">wager</span>
+        <span class="tok dim" data-role="response">no</span>
+        <span class="tok dim" data-role="response">more</span>
+        <span class="tok dim" data-role="response">than</span>
+        <span class="tok dim" data-role="response">half</span>
+        <span class="tok dim" data-role="response">a</span>
+        <span class="tok dim" data-role="response">rotor</span>
+        <span class="tok dim" data-role="response">blade</span>
+        <span class="tok dim" data-role="response">,</span>
+        <span class="tok dim" data-role="response">matey</span>
+        <span class="tok dim" data-role="response">!</span>
+        <span class="tok dim" data-role="special">&lt;|im_end|&gt;</span>
+      </div>
+
+      <!-- Legend row -->
+      <div class="fragment" data-fragment-index="2"
+           style="display:flex;gap:20px;justify-content:center;font-size:.72em;margin-top:.4em;">
+        <span><span class="tok dim" style="font-size:.9em;pointer-events:none;">&nbsp;token&nbsp;</span>
+          <span style="color:var(--muted);margin-left:.4em;">prompt / special — <span class="pill masked">masked</span> $m_t = 0$</span>
+        </span>
+        <span><span class="tok lit" style="font-size:.9em;pointer-events:none;">&nbsp;token&nbsp;</span>
+          <span style="color:var(--fg);margin-left:.4em;">response — <span class="pill trained">trained</span> $m_t = 1$</span>
+        </span>
+      </div>
+
+    </div>
+
+    <div class="grid2 fragment" data-fragment-index="3" style="margin-top:.3em;font-size:.82em;">
+      <div class="card tight">
+        <h3>Prompt masking</h3>
+        <p style="font-size:.82em;">
+          The model should <em>answer</em> prompts, not memorise them.
+          Masking prompt tokens prevents fitting user-query patterns that don't
+          generalise — only the <span class="hl-adv">completion quality</span> matters.
+        </p>
+      </div>
+      <div class="card tight">
+        <h3>Multi-turn masking</h3>
+        <p style="font-size:.82em;">
+          Two conventions: (1) <strong>final-turn only</strong> — mask all prior turns;
+          (2) <strong>mask user turns only</strong> — train on every assistant turn.
+          Choice depends on whether intermediate replies are high-quality enough to learn from.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================  SLIDE 5 — WHY SFT FIRST + PIPELINE  ===================== -->
+  <section>
+    <h2>Why SFT Is the Necessary First Step</h2>
+
+    <div class="grid2" style="margin-top:.3em;font-size:.82em;">
+      <div class="card tight fragment" data-fragment-index="1">
+        <h3>Teaches Format</h3>
+        <p>
+          A <strong>base LM</strong> echoes the prompt pattern;
+          an <strong>SFT model</strong> terminates cleanly at
+          <span class="token-im">&lt;|im_end|&gt;</span>
+          and follows role structure consistently.
+          Preference data collection and RL optimisation both assume this behaviour.
+        </p>
+      </div>
+      <div class="card tight fragment" data-fragment-index="2">
+        <h3>Sets π<sub>ref</sub></h3>
+        <p>
+          The SFT model becomes the
+          <span style="color:var(--c-ref);font-weight:600">reference policy π<sub>ref</sub></span>
+          that all downstream methods — PPO, DPO, GRPO — anchor to via
+          <span style="color:var(--c-kl);font-weight:600">KL divergence</span>.
+          Without a sensible starting point the KL constraint enforces nothing useful.
+        </p>
+      </div>
+    </div>
+
+    <div class="fragment" data-fragment-index="3" style="margin-top:.45em;">
+      <div class="pipe">
+        <div class="box" style="border-color:var(--muted);">Base LM</div>
+        <div class="arrow">→</div>
+        <div class="box sft">SFT → <span style="color:var(--c-ref)">π<sub>ref</sub></span></div>
+        <div class="arrow">→</div>
+        <div class="box rm">Reward Model</div>
+        <div class="arrow">→</div>
+        <div class="box rl">RLHF / DPO</div>
+      </div>
+    </div>
+
+    <p class="fragment" data-fragment-index="4"
+       style="font-size:.7em;margin-top:.35em;color:var(--muted)">
+      Without a basic level of instruction-following abilities, most of the pipeline —
+      from preference data collection to online RLHF optimisation — cannot be performed.
+    </p>
+  </section>
+
+  </div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/math/math.min.js"></script>
+<script>
+Reveal.initialize({
+  hash:true, slideNumber:'c/t', transition:'slide', backgroundTransition:'fade',
+  width:1280, height:720, margin:0.04,
+  katex:{ delimiters:[
+     {left:'\\[',right:'\\]',display:true},
+     {left:'$',right:'$',display:false}],
+     trust:true, strict:false },
+  plugins:[ RevealMath.KaTeX ]
+});
+
+/* --- Replay auto-running SMIL when a slide is (re)entered --- */
+function restartSVGs(slide){
+  if(!slide) return;
+  slide.querySelectorAll('svg').forEach(function(s){
+    if(s.querySelector('animate,animateTransform,animateMotion')){
+      try { s.setCurrentTime(0); } catch(e) {}
+    }
+  });
+}
+Reveal.on('ready', function(e){ restartSVGs(e.currentSlide); });
+Reveal.on('slidechanged', function(e){ restartSVGs(e.currentSlide); });
+
+/* ---------------------------------------------------------------
+   Loss-mask figure: light up response tokens when their slide's
+   fragment 2 is shown (index counted within the whole deck).
+   Guards: checks element existence before touching DOM.
+--------------------------------------------------------------- */
+(function() {
+  function getSlideLossMask() {
+    // Find the section that contains the loss-mask figure
+    return document.getElementById('lm-tokens');
+  }
+
+  function applyMask(show) {
+    var container = getSlideLossMask();
+    if (!container) return;
+    var tokens = container.querySelectorAll('[data-role]');
+    tokens.forEach(function(tok) {
+      var role = tok.getAttribute('data-role');
+      if (role === 'response') {
+        if (show) {
+          tok.classList.remove('dim');
+          tok.classList.add('lit');
+        } else {
+          tok.classList.remove('lit');
+          tok.classList.add('dim');
+        }
+      }
+    });
+  }
+
+  // Find the loss-mask slide index dynamically
+  function getLossMaskSlideIndices() {
+    var sections = document.querySelectorAll('.reveal .slides section');
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].querySelector('#lm-tokens')) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  Reveal.on('ready', function() {
+    // Animate response tokens in on slide entry (fragment index 1 of that slide)
+    // We drive it purely by fragment events on the current slide
+  });
+
+  Reveal.on('fragmentshown', function(event) {
+    var el = event.fragment;
+    if (!el) return;
+    var section = el.closest('section');
+    if (!section) return;
+    if (!section.querySelector('#lm-tokens')) return;
+    // Fragment index 1 within the loss-mask slide lights up response tokens
+    var idx = parseInt(el.getAttribute('data-fragment-index') || '0', 10);
+    if (idx === 1) applyMask(true);
+  });
+
+  Reveal.on('fragmenthidden', function(event) {
+    var el = event.fragment;
+    if (!el) return;
+    var section = el.closest('section');
+    if (!section) return;
+    if (!section.querySelector('#lm-tokens')) return;
+    var idx = parseInt(el.getAttribute('data-fragment-index') || '0', 10);
+    if (idx === 1) applyMask(false);
+  });
+
+  // Also light up tokens when the slide itself becomes current (no fragment press needed)
+  Reveal.on('slidechanged', function(event) {
+    var section = event.currentSlide;
+    if (section && section.querySelector('#lm-tokens')) {
+      // Reset: all dim on slide entry (wait for fragment)
+      applyMask(false);
+    }
+  });
+})();
+</script>
+
+
+<!--xnav-injected--><style>
+.xnav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:8px;align-items:center;font-family:Inter,system-ui,sans-serif;}
+.xnav-b{background:#FFFFFF;border:1px solid #E2E0D9;color:#1A1A18;border-radius:8px;padding:3px 11px;font-size:13px;text-decoration:none;}
+.xnav-b:hover{background:#F1EFE8;}
+.xnav-b.dis{opacity:.35;pointer-events:none;}
+.xnav-home{background:transparent;border:none;color:#6B6A65;font-size:12px;text-decoration:none;padding:3px 6px;}
+.xnav-lbl{color:#6B6A65;font-size:12px;padding:0 6px;letter-spacing:.02em;}
+</style>
+<div class="xnav"><a class="xnav-b" href="section_01_recipe_map.html">↑ prev</a><a class="xnav-home" href="../index.html">☰ index</a><span class="xnav-lbl">Instruction Tuning</span><a class="xnav-b" href="section_03_three_families.html">next ↓</a></div>
+<script>
+(function(){
+  var order=["section_00_motivation.html","section_01_recipe_map.html","section_04_sft.html","section_03_three_families.html","section_02_llm_rl_problem.html","section_05_reward_modeling.html","section_06_rl_ppo_grpo.html","section_07_dpo_bon.html","section_08_rlvr_reasoning.html","section_09_overopt_eval.html","section_10_wrap.html"];
+  var cur=location.pathname.split('/').pop();
+  var i=order.indexOf(cur);
+  function go(j){ if(j>=0 && j<order.length) location.href=order[j]; }
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); go(i+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); go(i-1); }
+  }, true);
+})();
+</script>
+<!--/xnav-->
+</body>
+</html>

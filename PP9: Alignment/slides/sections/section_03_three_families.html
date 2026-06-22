@@ -1,0 +1,418 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three Families of Optimization Tools — Preference Alignment</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/theme/white.min.css" id="theme">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+/* ── Section-local layout helpers ── */
+.family-card {
+  background: var(--bg-2);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: .35em;
+}
+.family-card .fc-title { font-weight: 700; font-size: .85em; }
+.family-card .fc-body  { font-size: .68em; color: var(--muted); line-height: 1.4; }
+.family-card .fc-tag   {
+  display: inline-block; padding: .1em .45em; border-radius: 5px;
+  font-size: .58em; font-weight: 700; margin-top: .2em;
+}
+.family-card.rl  { border-color: var(--c-policy); }
+.family-card.dpo { border-color: var(--c-pref); }
+.family-card.rs  { border-color: var(--c-adv); }
+.tag-rl  { background:rgba(29,111,184,.15); color:var(--c-policy); border:1px solid var(--c-policy); }
+.tag-dpo { background:rgba(194,24,91,.15);  color:var(--c-pref);  border:1px solid var(--c-pref); }
+.tag-rs  { background:rgba(46,125,70,.15); color:var(--c-adv);   border:1px solid var(--c-adv); }
+
+.tradeoff-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  gap: 8px; align-items: center; font-size: .72em;
+}
+.tradeoff-row.header {
+  font-size: .67em; font-weight: 700; color: var(--muted);
+  border-bottom: 1px solid var(--line); padding-bottom: .4em; margin-bottom: .2em;
+}
+.tradeoff-row .col0 { font-weight: 700; }
+.tick-good { color: var(--c-adv);    font-weight: 700; }
+.tick-mid  { color: var(--c-reward); font-weight: 700; }
+.tick-bad  { color: var(--c-value);  font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+  <!-- ═══════════════════════════════════════════════════
+       SLIDE 1 — TITLE
+  ═══════════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      Three Families of Optimization Tools
+    </h2>
+
+    <p class="fragment fade-up" data-fragment-index="1" style="font-size:.78em; color:var(--muted); margin-bottom:.5em;">
+      All three solve the <em>same</em> underlying objective — they differ in
+      <strong>how</strong> they query the reward and <strong>when</strong> they update the policy.
+    </p>
+
+    <div class="fragment fade-up" data-fragment-index="1" style="text-align:center; margin:.3em 0 .5em;">
+      $\max_{\htmlClass{k-policy}{\pi_\theta}}\;\mathbb{E}_{\htmlClass{k-policy}{y\sim\pi_\theta}}\!\left[\htmlClass{k-reward}{r(x,y)}\right] - \htmlClass{k-kl}{\beta\,D_{\mathrm{KL}}\!\left(\htmlClass{k-policy}{\pi_\theta}\;\|\;\htmlClass{k-ref}{\pi_{\mathrm{ref}}}\right)}$
+    </div>
+
+    <div class="pagetag">1</div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════
+       SLIDE 2 — THREE-FAMILY ANIMATED SCHEMA
+  ═══════════════════════════════════════════════════ -->
+  <section>
+    <h2>The Three Families — Data-Flow View</h2>
+
+    <svg id="fig-families" viewBox="0 0 1100 310" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%; max-height:300px; display:block; margin:.2em auto 0; overflow:visible;">
+      <defs>
+        <marker id="arr-pol" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#1D6FB8"/>
+        </marker>
+        <marker id="arr-rew" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#B5730F"/>
+        </marker>
+        <marker id="arr-pref" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#C2185B"/>
+        </marker>
+        <marker id="arr-adv" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#2E7D46"/>
+        </marker>
+        <marker id="arr-muted" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#6B6A65"/>
+        </marker>
+      </defs>
+
+      <!-- ════ (a) POLICY-GRADIENT RL PANEL ════ -->
+      <g id="panel-rl" class="fragment" data-fragment-index="1" style="transition:opacity 0.55s ease;">
+        <rect x="10" y="10" width="330" height="290" rx="16"
+              fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2"/>
+        <text x="175" y="38" text-anchor="middle" font-size="14" font-weight="700" fill="#1D6FB8" font-family="Inter,sans-serif">(a) Policy-Gradient RL</text>
+        <rect x="100" y="44" width="150" height="20" rx="10" fill="rgba(29,111,184,.15)" stroke="#1D6FB8" stroke-width="1"/>
+        <text x="175" y="58" text-anchor="middle" font-size="10" fill="#1D6FB8" font-family="Inter,sans-serif">generates on-policy samples</text>
+
+        <rect x="85"  y="80" width="120" height="46" rx="12" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2"/>
+        <text x="145" y="98"  text-anchor="middle" font-size="12" font-weight="700" fill="#1D6FB8" font-family="Inter,sans-serif">Policy</text>
+        <text x="145" y="114" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">π_θ generates y</text>
+
+        <rect x="85" y="180" width="120" height="46" rx="12" fill="#FFFFFF" stroke="#B5730F" stroke-width="2"/>
+        <text x="145" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="#B5730F" font-family="Inter,sans-serif">Reward Model</text>
+        <text x="145" y="214" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">scores r(x,y)</text>
+
+        <rect x="220" y="128" width="100" height="38" rx="10" fill="#FFFFFF" stroke="#2E7D46" stroke-width="1.5"/>
+        <text x="270" y="146" text-anchor="middle" font-size="11" font-weight="700" fill="#2E7D46" font-family="Inter,sans-serif">∇θ update</text>
+        <text x="270" y="160" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">policy gradient</text>
+
+        <path d="M145,126 L145,180" stroke="#1D6FB8" stroke-width="2.5"
+              fill="none" marker-end="url(#arr-pol)" stroke-dasharray="6 5">
+          <animate attributeName="stroke-dashoffset" from="0" to="-44" dur="1.6s" repeatCount="indefinite"/>
+        </path>
+        <text x="152" y="157" font-size="9" fill="#1D6FB8" font-family="Inter,sans-serif">rollout</text>
+
+        <path d="M205,203 Q230,203 220,165" stroke="#B5730F" stroke-width="2"
+              fill="none" marker-end="url(#arr-rew)" stroke-dasharray="6 5">
+          <animate attributeName="stroke-dashoffset" from="0" to="-44" dur="1.6s" repeatCount="indefinite"/>
+        </path>
+        <text x="216" y="195" font-size="9" fill="#B5730F" font-family="Inter,sans-serif">reward</text>
+
+        <path d="M270,128 Q290,90 207,95" stroke="#2E7D46" stroke-width="2"
+              fill="none" marker-end="url(#arr-adv)" stroke-dasharray="6 5">
+          <animate attributeName="stroke-dashoffset" from="0" to="-44" dur="1.6s" repeatCount="indefinite"/>
+        </path>
+        <text x="266" y="104" font-size="9" fill="#2E7D46" font-family="Inter,sans-serif">update</text>
+
+        <text x="305" y="82" font-size="10" fill="#7E3C9E" font-family="Inter,sans-serif" text-anchor="middle">−βKL</text>
+        <text x="305" y="94" font-size="9" fill="#6B6A65" font-family="Inter,sans-serif" text-anchor="middle">guard rail</text>
+
+        <rect x="60" y="272" width="230" height="20" rx="10" fill="rgba(29,111,184,.12)" stroke="#1D6FB8" stroke-width="1"/>
+        <text x="175" y="285" text-anchor="middle" font-size="10" fill="#1D6FB8" font-family="Inter,sans-serif">PPO / GRPO / REINFORCE</text>
+      </g>
+
+      <!-- ════ (b) DPO / DIRECT ALIGNMENT PANEL ════ -->
+      <g id="panel-dpo" class="fragment" data-fragment-index="2" style="transition:opacity 0.55s ease;">
+        <rect x="385" y="10" width="330" height="290" rx="16"
+              fill="#FFFFFF" stroke="#C2185B" stroke-width="2"/>
+        <text x="550" y="38" text-anchor="middle" font-size="14" font-weight="700" fill="#C2185B" font-family="Inter,sans-serif">(b) Direct Alignment (DPO)</text>
+        <rect x="462" y="44" width="176" height="20" rx="10" fill="rgba(194,24,91,.15)" stroke="#C2185B" stroke-width="1"/>
+        <text x="550" y="58" text-anchor="middle" font-size="10" fill="#C2185B" font-family="Inter,sans-serif">offline — fixed preference dataset</text>
+
+        <rect x="440" y="75" width="220" height="46" rx="12" fill="#FFFFFF" stroke="#C2185B" stroke-width="2"/>
+        <text x="550" y="93"  text-anchor="middle" font-size="12" font-weight="700" fill="#C2185B" font-family="Inter,sans-serif">Preference Dataset</text>
+        <text x="550" y="109" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">(x, y_w, y_l) pairs — fixed, offline</text>
+
+        <rect x="450" y="155" width="200" height="46" rx="12" fill="#FFFFFF" stroke="#7E3C9E" stroke-width="1.5"/>
+        <text x="550" y="173" text-anchor="middle" font-size="11" font-weight="700" fill="#7E3C9E" font-family="Inter,sans-serif">Log-ratio loss</text>
+        <text x="550" y="189" text-anchor="middle" font-size="9.5" fill="#6B6A65" font-family="Inter,sans-serif">log π_θ(y_w)/π_ref(y_w) − log π_θ(y_l)/π_ref(y_l)</text>
+
+        <rect x="465" y="228" width="170" height="38" rx="12" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2"/>
+        <text x="550" y="245" text-anchor="middle" font-size="12" font-weight="700" fill="#1D6FB8" font-family="Inter,sans-serif">Policy π_θ</text>
+        <text x="550" y="259" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">updated once per batch</text>
+
+        <path d="M550,121 L550,155" stroke="#C2185B" stroke-width="2.5"
+              fill="none" marker-end="url(#arr-pref)" stroke-dasharray="6 5">
+          <animate attributeName="stroke-dashoffset" from="0" to="-44" dur="1.9s" repeatCount="indefinite"/>
+        </path>
+
+        <path d="M550,201 L550,228" stroke="#7E3C9E" stroke-width="2"
+              fill="none" marker-end="url(#arr-muted)" stroke-dasharray="6 5">
+          <animate attributeName="stroke-dashoffset" from="0" to="-44" dur="1.9s" repeatCount="indefinite"/>
+        </path>
+        <text x="558" y="219" font-size="9" fill="#7E3C9E" font-family="Inter,sans-serif">supervised update</text>
+
+        <rect x="432" y="272" width="236" height="20" rx="10" fill="rgba(194,24,91,.12)" stroke="#C2185B" stroke-width="1"/>
+        <text x="550" y="285" text-anchor="middle" font-size="10" fill="#C2185B" font-family="Inter,sans-serif">DPO / IPO / KTO · no explicit RM</text>
+      </g>
+
+      <!-- ════ (c) REJECTION SAMPLING PANEL ════ -->
+      <g id="panel-rs" class="fragment" data-fragment-index="3" style="transition:opacity 0.55s ease;">
+        <rect x="760" y="10" width="330" height="290" rx="16"
+              fill="#FFFFFF" stroke="#2E7D46" stroke-width="2"/>
+        <text x="925" y="38" text-anchor="middle" font-size="14" font-weight="700" fill="#2E7D46" font-family="Inter,sans-serif">(c) Rejection Sampling</text>
+        <rect x="835" y="44" width="180" height="20" rx="10" fill="rgba(46,125,70,.15)" stroke="#2E7D46" stroke-width="1"/>
+        <text x="925" y="58" text-anchor="middle" font-size="10" fill="#2E7D46" font-family="Inter,sans-serif">semi-online — filter, then fine-tune</text>
+
+        <rect x="820" y="75" width="210" height="42" rx="12" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2"/>
+        <text x="925" y="93"  text-anchor="middle" font-size="12" font-weight="700" fill="#1D6FB8" font-family="Inter,sans-serif">Policy π_θ</text>
+        <text x="925" y="109" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">sample N completions per prompt</text>
+
+        <rect x="820" y="157" width="210" height="42" rx="12" fill="#FFFFFF" stroke="#B5730F" stroke-width="2"/>
+        <text x="925" y="175" text-anchor="middle" font-size="12" font-weight="700" fill="#B5730F" font-family="Inter,sans-serif">RM Filter</text>
+        <text x="925" y="191" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">keep top-k scored completions</text>
+
+        <rect x="835" y="228" width="180" height="38" rx="12" fill="#FFFFFF" stroke="#2E7D46" stroke-width="1.5"/>
+        <text x="925" y="245" text-anchor="middle" font-size="11" font-weight="700" fill="#2E7D46" font-family="Inter,sans-serif">SFT Fine-tune</text>
+        <text x="925" y="259" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">imitate the winners</text>
+
+        <path d="M925,117 L925,157" stroke="#1D6FB8" stroke-width="2.5"
+              fill="none" marker-end="url(#arr-pol)" stroke-dasharray="6 5">
+          <animate attributeName="stroke-dashoffset" from="0" to="-44" dur="1.5s" repeatCount="indefinite"/>
+        </path>
+        <text x="933" y="141" font-size="9" fill="#1D6FB8" font-family="Inter,sans-serif">N rollouts</text>
+
+        <path d="M925,199 L925,228" stroke="#B5730F" stroke-width="2"
+              fill="none" marker-end="url(#arr-rew)" stroke-dasharray="6 5">
+          <animate attributeName="stroke-dashoffset" from="0" to="-44" dur="1.5s" repeatCount="indefinite"/>
+        </path>
+        <text x="933" y="219" font-size="9" fill="#B5730F" font-family="Inter,sans-serif">winners</text>
+
+        <rect x="805" y="272" width="240" height="20" rx="10" fill="rgba(46,125,70,.12)" stroke="#2E7D46" stroke-width="1"/>
+        <text x="925" y="285" text-anchor="middle" font-size="10" fill="#2E7D46" font-family="Inter,sans-serif">RS / Best-of-N</text>
+      </g>
+    </svg>
+
+    <div class="grid3" style="margin-top:.35em;">
+      <div class="family-card rl fragment fade-up" data-fragment-index="1">
+        <div class="fc-title" style="color:var(--c-policy);">(a) Policy-Gradient RL</div>
+        <div class="fc-body"><span class="hl-policy">π<sub>θ</sub></span> generates live completions → <span class="hl-reward">RM</span> scores → gradient update. Needs live rollouts + explicit RM.</div>
+        <span class="fc-tag tag-rl">PPO / GRPO</span>
+      </div>
+      <div class="family-card dpo fragment fade-up" data-fragment-index="2">
+        <div class="fc-title" style="color:var(--c-pref);">(b) Direct Alignment (DPO)</div>
+        <div class="fc-body">Re-parameterises reward implicitly via log-ratio $\pi_\theta/\pi_\text{ref}$. Fixed preference pairs supervise <span class="hl-policy">π<sub>θ</sub></span> — no separate RM.</div>
+        <span class="fc-tag tag-dpo">DPO / IPO / KTO</span>
+      </div>
+      <div class="family-card rs fragment fade-up" data-fragment-index="3">
+        <div class="fc-title" style="color:var(--c-adv);">(c) Rejection Sampling</div>
+        <div class="fc-body">Sample <em>N</em>, keep top scored by <span class="hl-reward">RM</span>, fine-tune on winners. No gradient through reward — simplest RL-like loop.</div>
+        <span class="fc-tag tag-rs">RS / Best-of-N</span>
+      </div>
+    </div>
+
+    <div class="fragment fade-up" data-fragment-index="4" style="margin-top:.4em; text-align:center;">
+      <div class="callout" style="display:inline-block; font-size:.56em; padding:.3em 1em;">
+        All three optimise the <em>same</em> KL-regularised objective — they differ in
+        <strong>when</strong> reward is queried and <strong>whether</strong> updates are on-policy.
+      </div>
+    </div>
+    <div class="pagetag">2</div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════
+       SLIDE 3 — ONLINE vs OFFLINE + tradeoffs + why RL wins
+  ═══════════════════════════════════════════════════ -->
+  <section>
+    <h2>Online vs Offline — The Core Structural Difference</h2>
+
+    <svg id="fig-online-offline" viewBox="0 0 1060 220" xmlns="http://www.w3.org/2000/svg"
+         style="width:100%; max-height:210px; display:block; margin:.1em auto 0; overflow:visible;">
+      <defs>
+        <marker id="ao-pol" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L7,3 z" fill="#1D6FB8"/>
+        </marker>
+        <marker id="ao-pref" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L7,3 z" fill="#C2185B"/>
+        </marker>
+        <marker id="ao-rew" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L7,3 z" fill="#B5730F"/>
+        </marker>
+      </defs>
+
+      <!-- ─── LEFT PANEL: ONLINE / RL ─── -->
+      <rect x="20" y="8" width="480" height="204" rx="16" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2"/>
+      <text x="260" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#1D6FB8" font-family="Inter,sans-serif">ONLINE — RL pulls fresh samples every step</text>
+
+      <circle cx="140" cy="120" r="42" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2.5"/>
+      <text x="140" y="116" text-anchor="middle" font-size="12" font-weight="700" fill="#1D6FB8" font-family="Inter,sans-serif">Policy</text>
+      <text x="140" y="131" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">π_θ</text>
+
+      <circle cx="370" cy="120" r="42" fill="#FFFFFF" stroke="#B5730F" stroke-width="2.5"/>
+      <text x="370" y="116" text-anchor="middle" font-size="12" font-weight="700" fill="#B5730F" font-family="Inter,sans-serif">Reward</text>
+      <text x="370" y="131" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">model</text>
+
+      <path d="M178,95 Q255,48 332,95"
+            stroke="#1D6FB8" stroke-width="2.5" fill="none" marker-end="url(#ao-pol)"
+            stroke-dasharray="8 6">
+        <animate attributeName="stroke-dashoffset" from="0" to="-56" dur="1.7s" repeatCount="indefinite"/>
+      </path>
+      <text x="255" y="56" text-anchor="middle" font-size="10" fill="#1D6FB8" font-family="Inter,sans-serif">new completions</text>
+
+      <path d="M332,145 Q255,192 178,145"
+            stroke="#B5730F" stroke-width="2.5" fill="none" marker-end="url(#ao-rew)"
+            stroke-dasharray="8 6">
+        <animate attributeName="stroke-dashoffset" from="0" to="-56" dur="1.7s" repeatCount="indefinite"/>
+      </path>
+      <text x="255" y="188" text-anchor="middle" font-size="10" fill="#B5730F" font-family="Inter,sans-serif">reward signal → gradient update</text>
+
+      <text x="255" y="120" text-anchor="middle" font-size="11" fill="#2E7D46" font-family="Inter,sans-serif" font-weight="700">
+        each step
+        <animate attributeName="opacity" values="1;0.3;1" dur="2.6s" repeatCount="indefinite"/>
+      </text>
+
+      <!-- ─── RIGHT PANEL: OFFLINE / DPO ─── -->
+      <rect x="560" y="8" width="480" height="204" rx="16" fill="#FFFFFF" stroke="#C2185B" stroke-width="2"/>
+      <text x="800" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#C2185B" font-family="Inter,sans-serif">OFFLINE — DPO reads a fixed dataset</text>
+
+      <ellipse cx="680" cy="100" rx="55" ry="22" fill="#FFFFFF" stroke="#C2185B" stroke-width="2"/>
+      <rect x="625" y="100" width="110" height="38" fill="#FFFFFF" stroke="#C2185B" stroke-width="2"/>
+      <ellipse cx="680" cy="138" rx="55" ry="18" fill="#F3F1EA" stroke="#C2185B" stroke-width="2"/>
+      <text x="680" y="120" text-anchor="middle" font-size="10" fill="#C2185B" font-family="Inter,sans-serif" font-weight="700">Preference DB</text>
+      <text x="680" y="133" text-anchor="middle" font-size="9" fill="#6B6A65" font-family="Inter,sans-serif">(y_w, y_l) fixed — no new data</text>
+
+      <circle cx="920" cy="120" r="42" fill="#FFFFFF" stroke="#1D6FB8" stroke-width="2.5"/>
+      <text x="920" y="116" text-anchor="middle" font-size="12" font-weight="700" fill="#1D6FB8" font-family="Inter,sans-serif">Policy</text>
+      <text x="920" y="131" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif">π_θ</text>
+
+      <path d="M735,120 L877,120"
+            stroke="#C2185B" stroke-width="2.5" fill="none" marker-end="url(#ao-pref)"
+            stroke-dasharray="7 5">
+        <animate attributeName="stroke-dashoffset" from="0" to="-48" dur="2.2s" repeatCount="indefinite"/>
+      </path>
+      <text x="806" y="106" text-anchor="middle" font-size="10" fill="#C2185B" font-family="Inter,sans-serif">read once per batch</text>
+      <text x="806" y="152" text-anchor="middle" font-size="10.5" fill="#6B6A65" font-family="Inter,sans-serif">log-ratio supervised update</text>
+
+      <text x="680" y="170" text-anchor="middle" font-size="10" fill="#6B6A65" font-family="Inter,sans-serif" font-style="italic">dataset never changes</text>
+    </svg>
+
+    <!-- Tradeoff table -->
+    <div class="card" style="margin-top:.4em; font-size:.82em;">
+      <div class="tradeoff-row header fragment fade-up" data-fragment-index="1">
+        <div></div>
+        <div style="text-align:center;">Data regime</div>
+        <div style="text-align:center;">Compute cost</div>
+        <div style="text-align:center;">Stability</div>
+      </div>
+      <div class="tradeoff-row fragment fade-up" data-fragment-index="1">
+        <div class="col0" style="color:var(--c-policy);">Policy-Gradient RL</div>
+        <div style="text-align:center;"><span class="tick-mid">online</span><br><small style="color:var(--muted);">generates on-policy</small></div>
+        <div style="text-align:center;"><span class="tick-bad">high</span><br><small style="color:var(--muted);">rollouts + RM</small></div>
+        <div style="text-align:center;"><span class="tick-mid">moderate</span><br><small style="color:var(--muted);">sensitive to hypers</small></div>
+      </div>
+      <div class="tradeoff-row fragment fade-up" data-fragment-index="2" style="border-top:1px solid var(--line); padding-top:.3em; margin-top:.3em;">
+        <div class="col0" style="color:var(--c-pref);">Direct Alignment (DPO)</div>
+        <div style="text-align:center;"><span class="tick-good">offline</span><br><small style="color:var(--muted);">static pref. dataset</small></div>
+        <div style="text-align:center;"><span class="tick-good">low</span><br><small style="color:var(--muted);">supervised loss only</small></div>
+        <div style="text-align:center;"><span class="tick-good">high</span><br><small style="color:var(--muted);">no RM, simpler</small></div>
+      </div>
+      <div class="tradeoff-row fragment fade-up" data-fragment-index="3" style="border-top:1px solid var(--line); padding-top:.3em; margin-top:.3em;">
+        <div class="col0" style="color:var(--c-adv);">Rejection Sampling</div>
+        <div style="text-align:center;"><span class="tick-mid">semi-online</span><br><small style="color:var(--muted);">sample then filter</small></div>
+        <div style="text-align:center;"><span class="tick-mid">medium</span><br><small style="color:var(--muted);">N samples/prompt</small></div>
+        <div style="text-align:center;"><span class="tick-good">very high</span><br><small style="color:var(--muted);">no RL instability</small></div>
+      </div>
+    </div>
+
+    <!-- Why RL still wins — condensed advantages -->
+    <div class="fragment fade-up" data-fragment-index="4" style="margin-top:.35em;font-size:.7em;color:var(--muted);">
+      <strong style="color:var(--c-policy);">Why RL still wins where it matters:</strong>
+      <span class="fragment" data-fragment-index="4"> ① optimizes <em>non-differentiable</em> rewards (code compiles, math verifies);</span>
+      <span class="fragment" data-fragment-index="5"> ② trains on <em>on-policy</em> data — targets the model's own failure modes;</span>
+      <span class="fragment" data-fragment-index="6"> ③ can <em>exceed the SFT ceiling</em> — R1-Zero discovered CoT reasoning no demonstration contained.</span>
+    </div>
+
+    <div class="fragment fade-up" data-fragment-index="7" style="margin-top:.35em;">
+      <div class="callout kl" style="font-size:.74em;">
+        <strong>Rule of thumb:</strong>
+        start with <span style="color:var(--c-pref); font-weight:600;">DPO</span> for simplicity;
+        upgrade to <span class="hl-policy">RL</span> when you need on-policy exploration or
+        <strong>verifiable rewards</strong> (math, code);
+        use <span style="color:var(--c-adv); font-weight:600;">rejection sampling</span>
+        to bootstrap SFT data cheaply.
+      </div>
+    </div>
+    <div class="pagetag">3</div>
+  </section>
+
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/5.1.0/plugin/math/math.min.js"></script>
+<script>
+Reveal.initialize({
+  hash:true, slideNumber:'c/t', transition:'slide', backgroundTransition:'fade',
+  width:1280, height:720, margin:0.04,
+  katex:{ delimiters:[
+    {left:'\\[',right:'\\]',display:true},
+    {left:'$',right:'$',display:false}],
+    trust:true, strict:false },
+  plugins:[ RevealMath.KaTeX ]
+});
+
+/* ─── Replay auto-running SMIL when a slide is (re)entered ─── */
+function restartSVGs(slide){
+  if(!slide) return;
+  slide.querySelectorAll('svg').forEach(function(s){
+    if(s.querySelector('animate,animateTransform,animateMotion')){
+      try { s.setCurrentTime(0); } catch(e) {}
+    }
+  });
+}
+Reveal.on('ready', function(e){ restartSVGs(e.currentSlide); });
+Reveal.on('slidechanged', function(e){ restartSVGs(e.currentSlide); });
+/* Panels (a)/(b)/(c) are native reveal fragments sharing the same
+   data-fragment-index as their description cards, so each panel lands
+   together with its card — no JS driver needed. */
+</script>
+
+<!--xnav--><style>
+.xnav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:8px;align-items:center;font-family:Inter,system-ui,sans-serif;}
+.xnav-b{background:#FFFFFF;border:1px solid #E2E0D9;color:#1A1A18;border-radius:8px;padding:3px 11px;font-size:13px;text-decoration:none;}
+.xnav-b:hover{background:#F1EFE8;}
+.xnav-b.dis{opacity:.35;pointer-events:none;}
+.xnav-home{background:transparent;border:none;color:#6B6A65;font-size:12px;text-decoration:none;padding:3px 6px;}
+.xnav-lbl{color:#6B6A65;font-size:12px;padding:0 6px;letter-spacing:.02em;}
+</style>
+<div class="xnav"><a class="xnav-b" href="section_04_sft.html">↑ prev</a><a class="xnav-home" href="../index.html">☰ index</a><span class="xnav-lbl">Three Families</span><a class="xnav-b" href="section_02_llm_rl_problem.html">next ↓</a></div>
+<script>
+(function(){
+  var order=["section_00_motivation.html","section_01_recipe_map.html","section_04_sft.html","section_03_three_families.html","section_02_llm_rl_problem.html","section_05_reward_modeling.html","section_06_rl_ppo_grpo.html","section_07_dpo_bon.html","section_08_rlvr_reasoning.html","section_09_overopt_eval.html","section_10_wrap.html"];
+  var cur=location.pathname.split('/').pop();
+  var i=order.indexOf(cur);
+  function go(j){ if(j>=0 && j<order.length) location.href=order[j]; }
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); go(i+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); go(i-1); }
+  }, true);
+})();
+</script>
+<!--/xnav-->
+</body>
+</html>
